@@ -3,6 +3,7 @@
 #include <vector>
 #include <cmath>
 #include <cstring>
+#include <iomanip>
 #include <zlib.h>
 
 #define default_infile "test.bin"
@@ -85,265 +86,165 @@ void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint
 	#ifdef debug
 	std::cout<<"Offset list initial capacity:"<<offsets.capacity()<<std::endl;
 	pause();
-	uint_fast64_t nMatch1=0;
-	uint_fast64_t nMatch2=0;
-	uint_fast64_t nMatch3=0;
-	uint_fast64_t nMatch4=0;
-	uint_fast64_t nMatch5=0;
-	uint_fast64_t nMatch6=0;
 	#endif
 
 	uint_fast64_t i;
 	uint_fast64_t redlen=buffLen-1;//it is pointless to test the last byte and it could cause and out of bounds read
+	//a new variable is used so the substraction is only performed once, not every time it loops
 
-	for(i=0;i<redlen;i++){
-        switch(buffer[i]){
-            case 120://hex 78
-            {
-                switch(buffer[i+1]){
-                    case 1:{//hex 78 01
-                        #ifdef debug
-                        nMatch1++;
-                        std::cout<<"Found zlib header(78 01) with 32K window at offset: "<<i<<std::endl;
-                        #endif // debug
-                        offsets.push_back(fileOffset(i, 1));
-                        break;
-                    }
-                    case 94:{//hex 78 5E
-                        #ifdef debug
-                        nMatch1++;
-                        std::cout<<"Found zlib header(78 5E) with 32K window at offset: "<<i<<std::endl;
-                        #endif // debug
-                        offsets.push_back(fileOffset(i, 2));
-                        break;
-                    }
-                    case 156:{//hex 78 9C
-                        #ifdef debug
-                        nMatch1++;
-                        std::cout<<"Found zlib header(78 9C) with 32K window at offset: "<<i<<std::endl;
-                        #endif // debug
-                        offsets.push_back(fileOffset(i, 3));
-                        break;
-                    }
-                    case 218:{//hex 78 DA
-                        #ifdef debug
-                        nMatch1++;
-                        std::cout<<"Found zlib header(78 DA) with 32K window at offset: "<<i<<std::endl;
-                        #endif // debug
-                        offsets.push_back(fileOffset(i, 4));
-                        break;
-                    }
-                }
-                break;
-            }
-            case 104://hex 68
-            {
-                switch(buffer[i+1]){
-                    case 222:{//hex 68 DE
-                        #ifdef debug
-                        nMatch2++;
-                        std::cout<<"Found zlib header(68 DE) with 16K window at offset: "<<i<<std::endl;
-                        #endif // debug
-                        offsets.push_back(fileOffset(i, 5));
-                        break;
-                    }
-                    case 129:{//hex 68 81
-                        #ifdef debug
-                        nMatch2++;
-                        std::cout<<"Found zlib header(68 81) with 16K window at offset: "<<i<<std::endl;
-                        #endif // debug
-                        offsets.push_back(fileOffset(i, 6));
-                        break;
-                    }
-                    case 67:{//hex 68 43
-                        #ifdef debug
-                        nMatch2++;
-                        std::cout<<"Found zlib header(68 43) with 16K window at offset: "<<i<<std::endl;
-                        #endif // debug
-                        offsets.push_back(fileOffset(i, 7));
-                        break;
-                    }
-                    case 5:{//hex 68 05
-                        #ifdef debug
-                        nMatch2++;
-                        std::cout<<"Found zlib header(68 05) with 16K window at offset: "<<i<<std::endl;
-                        #endif // debug
-                        offsets.push_back(fileOffset(i, 8));
-                        break;
-                    }
-                }
-                break;
-            }
-            case 88://hex 58
-            {
-                switch(buffer[i+1]){
-                    case 195:{//hex 58 C3
-                        #ifdef debug
-                        nMatch3++;
-                        std::cout<<"Found zlib header(58 C3) with 8K window at offset: "<<i<<std::endl;
-                        #endif // debug
-                        offsets.push_back(fileOffset(i, 9));
-                        break;
-                    }
-                    case 133:{//hex 58 85
-                        #ifdef debug
-                        nMatch3++;
-                        std::cout<<"Found zlib header(58 85) with 8K window at offset: "<<i<<std::endl;
-                        #endif // debug
-                        offsets.push_back(fileOffset(i, 10));
-                        break;
-                    }
-                    case 71:{//hex 58 47
-                        #ifdef debug
-                        nMatch3++;
-                        std::cout<<"Found zlib header(58 47) with 8K window at offset: "<<i<<std::endl;
-                        #endif // debug
-                        offsets.push_back(fileOffset(i, 11));
-                        break;
-                    }
-                    case 9:{//hex 58 09
-                        #ifdef debug
-                        nMatch3++;
-                        std::cout<<"Found zlib header(58 09) with 8K window at offset: "<<i<<std::endl;
-                        #endif // debug
-                        offsets.push_back(fileOffset(i, 12));
-                        break;
-                    }
-                }
-                break;
-            }
-            case 72://hex 48
-            {
-                switch(buffer[i+1]){
-                    case 199:{//hex 48 C7
-                        #ifdef debug
-                        nMatch4++;
-                        std::cout<<"Found zlib header(48 C7) with 4K window at offset: "<<i<<std::endl;
-                        #endif // debug
-                        offsets.push_back(fileOffset(i, 13));
-                        break;
-                    }
-                    case 137:{//hex 48 89
-                        #ifdef debug
-                        nMatch4++;
-                        std::cout<<"Found zlib header(48 89) with 4K window at offset: "<<i<<std::endl;
-                        #endif // debug
-                        offsets.push_back(fileOffset(i, 14));
-                        break;
-                    }
-                    case 75:{//hex 48 4B
-                        #ifdef debug
-                        nMatch4++;
-                        std::cout<<"Found zlib header(48 4B) with 4K window at offset: "<<i<<std::endl;
-                        #endif // debug
-                        offsets.push_back(fileOffset(i, 15));;
-                        break;
-                    }
-                    case 13:{//hex 48 0D
-                        #ifdef debug
-                        nMatch4++;
-                        std::cout<<"Found zlib header(48 0D) with 4K window at offset: "<<i<<std::endl;
-                        #endif // debug
-                        offsets.push_back(fileOffset(i, 16));
-                        break;
+    for(i=0;i<redlen;i++){
+        //search for 7801, 785E, 789C, 78DA, 68DE, 6881, 6843, 6805, 58C3, 5885, 5847, 5809,
+        //           48C7, 4889, 484B, 480D, 38CB, 388D, 384F, 3811, 28CF, 2891, 2853, 2815
+	    int hbits = buffer[i]>>4;//upper 4 bits
+	    int lbits = buffer[i]&15;//lower 4 bits
+        if ((lbits==8)&&(hbits>=2)&&(hbits<=7)){//if the first byte is good
+            int v = buffer[i+1];
+            v=(v&(255-32-1))+((v&32)?1:0)+(v&1)*32;//swap 1st and 5th bit
+            if ((v+hbits*4)%62==60){
+                #ifdef debug
+                std::cout<<"Found zlib header("<<std::hex<<std::setfill('0')<<std::uppercase<<std::setw(2)<<(int)buffer[i]
+                <<" "<<std::setw(2)<<(int)buffer[i+1]<<std::dec<<") with "<<(1<<(hbits-2))<<"K window at offset: "<<i<<std::endl;
+                #endif // debug
+                switch(hbits){
+					case 7://hex 78
+					{
+						switch(buffer[i+1]){
+							case 1:{//hex 78 01
+								offsets.push_back(fileOffset(i, 1));
+								break;
+							}
+							case 94:{//hex 78 5E
+								offsets.push_back(fileOffset(i, 2));
+								break;
+							}
+							case 156:{//hex 78 9C
+								offsets.push_back(fileOffset(i, 3));
+								break;
+							}
+							case 218:{//hex 78 DA
+								offsets.push_back(fileOffset(i, 4));
+								break;
+							}
+						}
+						break;//from case 7
+					}
+					case 6://hex 68
+					{
+						switch(buffer[i+1]){
+							case 222:{//hex 68 DE
+								offsets.push_back(fileOffset(i, 5));
+								break;
+							}
+							case 129:{//hex 68 81
+								offsets.push_back(fileOffset(i, 6));
+								break;
+							}
+							case 67:{//hex 68 43
+								offsets.push_back(fileOffset(i, 7));
+								break;
+							}
+							case 5:{//hex 68 05
+								offsets.push_back(fileOffset(i, 8));
+								break;
+							}
+						}
+						break;//from case 6
+					}
+					case 5://hex 58
+					{
+						switch(buffer[i+1]){
+							case 195:{//hex 58 C3
+								offsets.push_back(fileOffset(i, 9));
+								break;
+							}
+							case 133:{//hex 58 85
+								offsets.push_back(fileOffset(i, 10));
+								break;
+							}
+							case 71:{//hex 58 47
+								offsets.push_back(fileOffset(i, 11));
+								break;
+							}
+							case 9:{//hex 58 09
+								offsets.push_back(fileOffset(i, 12));
+								break;
+							}
+						}
+						break;//from case 5
+					}
+					case 4://hex 48
+					{
+						switch(buffer[i+1]){
+							case 199:{//hex 48 C7
+								offsets.push_back(fileOffset(i, 13));
+								break;
+							}
+							case 137:{//hex 48 89
+								offsets.push_back(fileOffset(i, 14));
+								break;
+							}
+							case 75:{//hex 48 4B
+								offsets.push_back(fileOffset(i, 15));;
+								break;
+							}
+							case 13:{//hex 48 0D
+								offsets.push_back(fileOffset(i, 16));
+								break;
+							}
+						}
+						break;//from case 4
+					}
+					case 3://hex 38
+					{
+						switch(buffer[i+1]){
+							case 203:{
+								offsets.push_back(fileOffset(i, 17));
+								break;
+							}
+							case 141:{
+								offsets.push_back(fileOffset(i, 18));
+								break;
+							}
+							case 79:{
+								offsets.push_back(fileOffset(i, 19));
+								break;
+							}
+							case 17:{
+								offsets.push_back(fileOffset(i, 20));
+								break;
+							}
+						}
+						break;//from case 3
+					}
+					case 2://hex 28
+					{
+						switch(buffer[i+1]){
+							case 207:{
+								offsets.push_back(fileOffset(i, 21));
+								break;
+							}
+							case 145:{
+								offsets.push_back(fileOffset(i, 22));
+								break;
+							}
+							case 83:{
+								offsets.push_back(fileOffset(i, 23));
+								break;
+							}
+							case 21:{
+								offsets.push_back(fileOffset(i, 24));
+								break;
+							}
+						}
+						break;//from case 2
                     }
                 }
-                break;
-            }
-            case 56://hex 38
-            {
-                switch(buffer[i+1]){
-                    case 203:{
-                        #ifdef debug
-                        nMatch5++;
-                        std::cout<<"Found zlib header(38 CB) with 2K window at offset: "<<i<<std::endl;
-                        #endif // debug
-                        offsets.push_back(fileOffset(i, 17));
-                        break;
-                    }
-                    case 141:{
-                        #ifdef debug
-                        nMatch5++;
-                        std::cout<<"Found zlib header(38 8D) with 2K window at offset: "<<i<<std::endl;
-                        #endif // debug
-                        offsets.push_back(fileOffset(i, 18));
-                        break;
-                    }
-                    case 79:{
-                        #ifdef debug
-                        nMatch5++;
-                        std::cout<<"Found zlib header(38 4F) with 2K window at offset: "<<i<<std::endl;
-                        #endif // debug
-                        offsets.push_back(fileOffset(i, 19));
-                        break;
-                    }
-                    case 17:{
-                        #ifdef debug
-                        nMatch5++;
-                        std::cout<<"Found zlib header(38 11) with 2K window at offset: "<<i<<std::endl;
-                        #endif // debug
-                        offsets.push_back(fileOffset(i, 20));
-                        break;
-                    }
-                }
-                break;
-            }
-            case 40://hex 28
-            {
-                switch(buffer[i+1]){
-                    case 207:{
-                        #ifdef debug
-                        nMatch6++;
-                        std::cout<<"Found zlib header(28 CF) with 1K window at offset: "<<i<<std::endl;
-                        #endif // debug
-                        offsets.push_back(fileOffset(i, 21));
-                        break;
-                    }
-                    case 145:{
-                        #ifdef debug
-                        nMatch6++;
-                        std::cout<<"Found zlib header(28 91) with 1K window at offset: "<<i<<std::endl;
-                        #endif // debug
-                        offsets.push_back(fileOffset(i, 22));
-                        break;
-                    }
-                    case 83:{
-                        #ifdef debug
-                        nMatch6++;
-                        std::cout<<"Found zlib header(28 53) with 1K window at offset: "<<i<<std::endl;
-                        #endif // debug
-                        offsets.push_back(fileOffset(i, 23));
-                        break;
-                    }
-                    case 21:{
-                        #ifdef debug
-                        nMatch6++;
-                        std::cout<<"Found zlib header(28 15) with 1K window at offset: "<<i<<std::endl;
-                        #endif // debug
-                        offsets.push_back(fileOffset(i, 24));
-                        break;
-                    }
-                }
-                break;
             }
         }
     }
     #ifdef debug
     std::cout<<std::endl;
-	std::cout<<"32K full header matches:"<<nMatch1<<std::endl;
-	std::cout<<"16K full header matches:"<<nMatch2<<std::endl;
-	std::cout<<"8K full header matches:"<<nMatch3<<std::endl;
-	std::cout<<"4K full header matches:"<<nMatch4<<std::endl;
-	std::cout<<"2K full header matches:"<<nMatch5<<std::endl;
-	std::cout<<"1K full header matches:"<<nMatch6<<std::endl;
-	std::cout<<"Total header matches:"<<(nMatch1+nMatch2+nMatch3+nMatch4+nMatch5+nMatch6)<<std::endl;
 	std::cout<<"Number of collected offsets:"<<offsets.size()<<std::endl;
-	//sanity check, the number of offsets in the vector should always be the sum of found offsets
-	if ((nMatch1+nMatch2+nMatch3+nMatch4+nMatch5+nMatch6)!=offsets.size()){
-        std::cout<<"search error"<<std::endl;
-        pause();
-        abort();
-	}
     pause();
     #endif // debug
 }
@@ -397,14 +298,6 @@ int main(int argc, char* argv[]) {
     uint_fast64_t type4=0;
     #endif // debug
 
-    #ifdef debug
-	uint_fast64_t nMatch1=0;
-	uint_fast64_t nMatch2=0;
-	uint_fast64_t nMatch3=0;
-	uint_fast64_t nMatch4=0;
-	uint_fast64_t nMatch5=0;
-	uint_fast64_t nMatch6=0;
-	#endif
 	//offsetList stores memory offsets where potential headers can be found, and the type of the offset
 	vector<fileOffset> offsetList;
 	int_fast64_t i;
