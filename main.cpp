@@ -28,8 +28,6 @@ public:
     }
     int_fast64_t offset;
     int offsetType;
-    //int_fast64_t offset;
-    //int_fast64_t offset;
 };
 
 class streamOffset{
@@ -828,10 +826,10 @@ int main(int argc, char* argv[]) {
                                 strm1.opaque = Z_NULL;
                                 strm1.next_in=decompBuffer;
                                 #ifdef debug
-                                /*cout<<"-------------------------"<<endl;
+                                cout<<"-------------------------"<<endl;
                                 cout<<"   memlevel:"<<memlevel<<endl;
                                 cout<<"   clevel:"<<clevel<<endl;
-                                cout<<"   window:"<<window<<endl;*/
+                                cout<<"   window:"<<window<<endl;
                                 #endif // debug
                                 //use all default settings except clevel and memlevel
                                 ret = deflateInit2(&strm1, clevel, Z_DEFLATED, window, memlevel, Z_DEFAULT_STRATEGY);
