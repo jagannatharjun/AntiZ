@@ -2,7 +2,7 @@
 #include <fstream>
 #include <vector>
 #include <cmath>
-#include <sys/stat.h>
+#include <cstring>
 #include <zlib.h>
 
 #define default_infile "test.bin"
@@ -477,16 +477,10 @@ int main(int argc, char* argv[]) {
  	   abort();
 	}
 	//getting the size of the file
-	struct stat statresults;
-    if (stat(infile_name, &statresults) == 0){
-    	cout<<"Input size:"<<statresults.st_size<<endl;
-    }
-    else{
-    	cout<<"Error determining file size."<<endl;
-    	pause();
-    	abort();
-    }
-    infileSize=statresults.st_size;
+	infile.seekg (0, infile.end);
+	infileSize=infile.tellg();
+	infile.seekg (0, infile.beg);
+	cout<<"Input size:"<<infileSize<<endl;
     //setting up read buffer and reading the entire file into the buffer
     rBuffer = new unsigned char[infileSize];
     infile.read(reinterpret_cast<char*>(rBuffer), infileSize);
@@ -1493,15 +1487,10 @@ int main(int argc, char* argv[]) {
  	   abort();
 	}
 	cout<<"reconstructing from "<<atzfile_name<<endl;
-    if (stat(atzfile_name, &statresults) == 0){
-    	cout<<"File size:"<<statresults.st_size<<endl;
-    }
-    else{
-    	cout<<"Error determining file size."<<endl;
-    	pause();
-    	abort();
-    }
-    infileSize=statresults.st_size;
+    atzfile.seekg (0, atzfile.end);
+	infileSize=atzfile.tellg();
+	atzfile.seekg (0, atzfile.beg);
+	cout<<"Input size:"<<infileSize<<endl;
     //setting up read buffer and reading the entire file into the buffer
     unsigned char* atzBuffer = new unsigned char[infileSize];
     atzfile.read(reinterpret_cast<char*>(atzBuffer), infileSize);
