@@ -97,7 +97,7 @@ void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint
         //           48C7, 4889, 484B, 480D, 38CB, 388D, 384F, 3811, 28CF, 2891, 2853, 2815
 	    int hbits = buffer[i]>>4;//upper 4 bits
 	    int lbits = buffer[i]&15;//lower 4 bits
-        if ((lbits==8)&&(hbits>=2)&&(hbits<=7)){//if the first byte is good
+        if ((lbits==8)&&(hbits>=2)&&(hbits<=7)){//if the current byte is good check the next byte
             int v = buffer[i+1];
             v=(v&(255-32-1))+((v&32)?1:0)+(v&1)*32;//swap 1st and 5th bit
             if ((v+hbits*4)%62==60){
@@ -306,7 +306,9 @@ int main(int argc, char* argv[]) {
 
 	//PHASE 0
 	//opening file
-	/*for (int i = 0; i < argc; ++i) {//this code dumps the srtings from the CLI
+
+	//this code dumps the strings from the CLI, can be useful for debug
+	/*for (int i = 0; i < argc; ++i) {
         std::cout << argv[i] << std::endl;
     }*/
 	uint64_t infileSize;
@@ -385,56 +387,17 @@ int main(int argc, char* argv[]) {
 
     //PHASE 2
     //start trying to decompress at the collected offsets
-    /*
-		objects created:
-			streamOffsetList: vector holding offsets proven to be good
-			streamType: vector holding the types of proven offsets. Index-coupled to streamOffsetList.
-			streamLength: vector holding the lengths of proven offsets. Index-coupled to streamOffsetList.
-			inflatedLength: vector holding the inflated lengths of proven offsets. Index-coupled to streamOffsetList.
-			strm: zlib stream holding decompressed data
-		objects destroyed:
-            none
-		objects created, but not provided or destroyed:
-            none
-		variables declared:
-			lastGoodOffset: while iterating through the potential offsets, this keeps track of the previous good offset. Used for skipping offsets.
-			lastStreamLength: while iterating through the potential offsets, this keeps track of the length of the previous good stream. Used for skipping offsets.
-			memScale: used for dynamically scaling the decompression buffer if it proves to be too small
-			j: another general purpose iterator, to be used in nested for loops etc.
-			numOffsets: used to store the number of potential offsets. This is used to eliminate the need for a function call every time the loop need this number. Should improve speed slightly.
-			ret: used to store the return values of zlib functions
-		debug variables declared:
-			dataErrors:the number of improper offsets, that are not really zlib streams
-			numDecomp32k..1k: number of offsets with 32k..1k window that are valid
-		required:
-            offsetList
-            offsetType
-            infileSize
-            rBuffer
-		provides:
-			streamOffsetList
-			streamType
-			streamLength
-			inflatedLength
-			j
-			strm
-			ret
-	*/
 
     numOffsets=offsetList.size();
     for (i=0; i<numOffsets; i++)
     {
         if ((lastGoodOffset+lastStreamLength)<=offsetList[i].offset)
         {
-            /*
-            local variables and objects:
-                decompBuffer: used to hold the data resulting from the decompression
-            */
             //create a new Zlib stream to do decompression
             strm.zalloc = Z_NULL;
             strm.zfree = Z_NULL;
             strm.opaque = Z_NULL;
-            //since we have no idea about the lenght of the zlib stream, take the worst case, i.e. everything after the header belongs to the stream
+            //since we have no idea about the length of the zlib stream, take the worst case, i.e. everything after the header belongs to the stream
             strm.avail_in= infileSize-offsetList[i].offset;
             strm.next_in=rBuffer+offsetList[i].offset;//this is effectively adding an integer to a pointer, resulting in a pointer
             //initialize the stream for decompression and check for error
