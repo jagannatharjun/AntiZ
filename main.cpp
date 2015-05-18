@@ -77,6 +77,7 @@ public:
 };
 void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint_fast64_t buffLen);
 bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, uint64_t& total_out);
+void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets);
 
 void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint_fast64_t buffLen){
     //this function searches a buffer for zlib headers, count them and fill a vector of fileOffsets
@@ -251,14 +252,15 @@ void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint
 }
 
 bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, uint64_t& total_out){
+    //this function checks if there is a valid zlib stream at next_in
+    //if yes, then return with true and set the total_in and total_out variables to the deflated and inflated length of the stream
 	z_stream strm;
     strm.zalloc=Z_NULL;
     strm.zfree=Z_NULL;
     strm.opaque=Z_NULL;
-
-
     bool success=false;
     uint64_t memScale=1;
+
     while (true){
 		strm.avail_in=avail_in;
 		strm.next_in=next_in;
@@ -295,6 +297,33 @@ bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, 
     return success;
 }
 
+void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets){
+	uint64_t numOffsets=fileoffsets.size();
+	uint64_t lastGoodOffset=0;
+	uint64_t lastStreamLength=0;
+	uint64_t i;
+    for (i=0; i<numOffsets; i++){
+        //if the current offset is known to be part of the last stream it is pointless to check it
+        if ((lastGoodOffset+lastStreamLength)<=fileoffsets[i].offset){
+            //since we have no idea about the length of the zlib stream, take the worst case, i.e. everything after the header belongs to the stream
+            uint64_t inbytes, outbytes;
+            if (CheckOffset((buffer+fileoffsets[i].offset), (bufflen-fileoffsets[i].offset), inbytes, outbytes)){
+                lastGoodOffset=fileoffsets[i].offset;
+                lastStreamLength=inbytes;
+                streamoffsets.push_back(streamOffset(fileoffsets[i].offset, fileoffsets[i].offsetType, inbytes, outbytes));
+                #ifdef debug
+                std::cout<<"Offset #"<<i<<" decompressed, "<<inbytes<<" bytes to "<<outbytes<<" bytes"<<std::endl;
+                #endif // debug
+            }
+        }
+        #ifdef debug
+        else{
+            std::cout<<"skipping offset #"<<i<<" ("<<fileoffsets[i].offset<<") because it cannot be a header"<<std::endl;
+        }
+        #endif // debug
+    }
+}
+
 int main(int argc, char* argv[]) {
 	using std::cout;
 	using std::endl;
@@ -323,9 +352,6 @@ int main(int argc, char* argv[]) {
     bool slowmode=true;//slowmode bruteforces the zlib parameters, optimized mode only tries probable parameters based on the 2-byte header
     int_fast64_t concentrate=-404;//only try to recompress the stream# givel here, -1 disables this and runs on all streams
 
-    int_fast64_t lastGoodOffset=0;
-    int_fast64_t lastStreamLength=0;
-	uint_fast64_t numOffsets=0;
 	int ret=-9;
 	vector<streamOffset> streamOffsetList;
 	z_stream strm;
@@ -419,32 +445,13 @@ int main(int argc, char* argv[]) {
     #ifdef debug
     cout<<"Found "<<offsetList.size()<<" zlib headers"<<endl;
     #endif // debug
+
     //PHASE 2
     //start trying to decompress at the collected offsets
-
-    numOffsets=offsetList.size();
-    for (i=0; i<numOffsets; i++){
-        //if the current offset is known to be part of the last stream it is pointless to check it
-        if ((lastGoodOffset+lastStreamLength)<=offsetList[i].offset){
-            //since we have no idea about the length of the zlib stream, take the worst case, i.e. everything after the header belongs to the stream
-            uint64_t inbytes, outbytes;
-            if (CheckOffset((rBuffer+offsetList[i].offset), (infileSize-offsetList[i].offset), inbytes, outbytes)){
-                lastGoodOffset=offsetList[i].offset;
-                lastStreamLength=inbytes;
-                streamOffsetList.push_back(streamOffset(offsetList[i].offset, offsetList[i].offsetType, inbytes, outbytes));
-                #ifdef debug
-                cout<<"Offset #"<<i<<" decompressed, "<<inbytes<<" bytes to "<<outbytes<<" bytes"<<endl;
-                #endif // debug
-            }
-        }
-        #ifdef debug
-        else{
-            cout<<"skipping offset #"<<i<<" ("<<offsetList[i].offset<<") because it cannot be a header"<<endl;
-        }
-        #endif // debug
-    }
+    //test all offsets found in phase 1
+    testOffsetList(rBuffer, infileSize, offsetList, streamOffsetList);
     cout<<"Good offsets: "<<streamOffsetList.size()<<endl;
-    offsetList.clear();
+    offsetList.clear();//we only need the good offsets
     offsetList.shrink_to_fit();
     #ifdef debug
     pause();
@@ -454,7 +461,6 @@ int main(int argc, char* argv[]) {
     //start trying to find the parameters to use for recompression
 
     numGoodOffsets=streamOffsetList.size();
-    cout<<endl;
     for (j=0; j<numGoodOffsets; j++){
         if ((concentrate>=0)&&(j==0)) {
             j=concentrate;
