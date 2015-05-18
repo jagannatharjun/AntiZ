@@ -1,10 +1,11 @@
 # depslib dependency file v1.0
-1431893165 source:c:\users\szuperhab\desktop\prog\uncomp\main.cpp
+1431941377 source:c:\users\szuperhab\desktop\prog\uncomp\main.cpp
 	<iostream>
 	<fstream>
 	<vector>
 	<cmath>
 	<cstring>
+	<iomanip>
 	<zlib.h>
 
 1431205045 c:\users\szuperhab\desktop\prog\zlib test\zlib128\zlib.h
