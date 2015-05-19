@@ -19,25 +19,19 @@ void pause(){
 class fileOffset{
 public:
     fileOffset(){
-        offset=0;
-        offsetType=1;
         abort();//the default constructor should not be used in this version
     }
     fileOffset(int_fast64_t os, int ot){
         offset=os;
         offsetType=ot;
     }
-    int_fast64_t offset;
+    uint_fast64_t offset;
     int offsetType;
 };
 
 class streamOffset{
 public:
     streamOffset(){
-        offset=0;
-        offsetType=1;
-        streamLength=1;
-        inflatedLength=1;
         abort();//the default constructor should not be used in this version
     }
     streamOffset(uint64_t os, int ot, uint64_t sl, uint64_t il){
@@ -205,16 +199,24 @@ int main(int argc, char* argv[]) {
 	using std::endl;
 	using std::cin;
 	using std::vector;
+
+	uint_fast64_t i,j;
+	std::ifstream infile;
+	std::ofstream outfile;
+	vector<fileOffset> offsetList;//offsetList stores memory offsets where potential headers can be found, and the type of the offset
+	vector<streamOffset> streamOffsetList;//streamOffsetList stores offsets of confirmed zlib streams and a bunch of data on them
+	z_stream strm;
+	unsigned char* rBuffer;
+
 	uint64_t lastos=0;
     uint64_t lastlen=0;
     uint64_t atzlen=0;//placeholder for the length of the atz file
-    std::ofstream outfile;
+    int ret=-9;
     uint_fast64_t numGoodOffsets;
     int_fast64_t identicalBytes;
     #ifdef debug
     int_fast64_t numFullmatch=0;
     #endif // debug
-    uint_fast64_t j=0;
     int memlevel=9;
     int clevel=9;
     int window=15;
@@ -228,15 +230,6 @@ int main(int argc, char* argv[]) {
     bool slowmode=true;//slowmode bruteforces the zlib parameters, optimized mode only tries probable parameters based on the 2-byte header
     int_fast64_t concentrate=-404;//only try to recompress the stream# givel here, -1 disables this and runs on all streams
 
-	int ret=-9;
-	vector<streamOffset> streamOffsetList;
-	z_stream strm;
-
-	//offsetList stores memory offsets where potential headers can be found, and the type of the offset
-	vector<fileOffset> offsetList;
-	uint_fast64_t i;
-	unsigned char* rBuffer;
-	std::ifstream infile;
 
 	//PHASE 0
 	//opening file
@@ -249,33 +242,18 @@ int main(int argc, char* argv[]) {
 	char* infile_name;
 	char* reconfile_name;
 	char* atzfile_name;
-	if (argc>=2){// if we get at least one string use it as input file name
-        cout<<"Input file: "<<argv[1]<<endl;
-        if (argc>=3){//if we get at least two strings use the second as a parameter
-            if (strcmp(argv[2], "-r")==0){//if we get -r, treat the file as an ATZ file and skip to reconstruction
-                atzfile_name=argv[1];
-
-                reconfile_name= new char[strlen(argv[1])+5];
-                memset(reconfile_name, 0, (strlen(argv[1])+5));//null out the entire string
-                strcpy(reconfile_name, argv[1]);
-                reconfile_name=strcat(reconfile_name, ".rec");
-                cout<<"assuming input file is an ATZ file, attempting to reconstruct"<<endl;
-                cout<<"overwriting "<<reconfile_name<<" if present"<<endl;
-                goto PHASE5;
-            }else{//if the third stig is not a valid parameter then ignore it
-                infile_name=argv[1];
-                atzfile_name= new char[strlen(argv[1])+5];
-                memset(atzfile_name, 0, (strlen(argv[1])+5));//null out the entire string
-                strcpy(atzfile_name, argv[1]);
-                atzfile_name=strcat(atzfile_name, ".atz");
-
-                reconfile_name= new char[strlen(argv[1])+5];
-                memset(reconfile_name, 0, (strlen(argv[1])+5));//null out the entire string
-                strcpy(reconfile_name, argv[1]);
-                reconfile_name=strcat(reconfile_name, ".rec");
-                cout<<"overwriting "<<atzfile_name<<" and "<<reconfile_name<<" if present"<<endl;
-            }
-        }else{//if we get only the filename go forward to creating an ATZ file from it
+	switch(argc){
+        case 1:{//if we get nothing from the CLI
+            cout<<"Error: no input specified"<<endl;
+            cout<<"Usage: antiz.exe <input file> <switches>"<<endl;
+            cout<<"Valid switches:"<<endl;
+            cout<<"-r : assume the input file is an ATZ file, skip to reconstruction"<<endl;
+            pause();
+            return -1;
+            break;
+        }
+        case 2:{//if we only get a filename from the CLI
+            cout<<"Input file: "<<argv[1]<<endl;
             infile_name=argv[1];
             atzfile_name= new char[strlen(argv[1])+5];
             memset(atzfile_name, 0, (strlen(argv[1])+5));//null out the entire string
@@ -287,18 +265,64 @@ int main(int argc, char* argv[]) {
             strcpy(reconfile_name, argv[1]);
             reconfile_name=strcat(reconfile_name, ".rec");
             cout<<"overwriting "<<atzfile_name<<" and "<<reconfile_name<<" if present"<<endl;
+            break;
         }
-	}else{//if we get nothing from the CLI
-        cout<<"no input specified, trying to open test.bin"<<endl;
-        infile_name= new char[9];
-        infile_name=default_infile;
-        cout<<"overwriting atztest.atz and recon.bin if present"<<endl;
-        atzfile_name= new char[12];
-        atzfile_name=default_atzfile;
-        reconfile_name= new char[10];
-        reconfile_name=default_reconfile;
-	}
+        case 3:{//if we get at least two strings try to use the second as a switch
+            if (strcmp(argv[2], "-r")==0){//if we get -r, treat the file as an ATZ file and skip to reconstruction
+                atzfile_name=argv[1];
 
+                reconfile_name= new char[strlen(argv[1])+5];
+                memset(reconfile_name, 0, (strlen(argv[1])+5));//null out the entire string
+                strcpy(reconfile_name, argv[1]);
+                reconfile_name=strcat(reconfile_name, ".rec");
+                cout<<"assuming input file is an ATZ file, attempting to reconstruct"<<endl;
+                cout<<"overwriting "<<reconfile_name<<" if present"<<endl;
+                goto PHASE5;
+            }else{//if the third string is not a valid switch then ignore it
+                cout<<"invalid switch specified, ignoring"<<endl;
+                infile_name=argv[1];
+                atzfile_name= new char[strlen(argv[1])+5];
+                memset(atzfile_name, 0, (strlen(argv[1])+5));//null out the entire string
+                strcpy(atzfile_name, argv[1]);
+                atzfile_name=strcat(atzfile_name, ".atz");
+
+                reconfile_name= new char[strlen(argv[1])+5];
+                memset(reconfile_name, 0, (strlen(argv[1])+5));//null out the entire string
+                strcpy(reconfile_name, argv[1]);
+                reconfile_name=strcat(reconfile_name, ".rec");
+                cout<<"overwriting "<<atzfile_name<<" and "<<reconfile_name<<" if present"<<endl;
+                break;
+            }
+        }
+        default:{//if there are more than 2 strings ignore them
+            if (strcmp(argv[2], "-r")==0){//if we get -r, treat the file as an ATZ file and skip to reconstruction
+                cout<<"some switch(es) were invalid, ignoring"<<endl;
+                atzfile_name=argv[1];
+
+                reconfile_name= new char[strlen(argv[1])+5];
+                memset(reconfile_name, 0, (strlen(argv[1])+5));//null out the entire string
+                strcpy(reconfile_name, argv[1]);
+                reconfile_name=strcat(reconfile_name, ".rec");
+                cout<<"assuming input file is an ATZ file, attempting to reconstruct"<<endl;
+                cout<<"overwriting "<<reconfile_name<<" if present"<<endl;
+                goto PHASE5;
+            }else{//if the third string is not a valid switch then ignore it
+                cout<<"invalid switches specified, ignoring"<<endl;
+                infile_name=argv[1];
+                atzfile_name= new char[strlen(argv[1])+5];
+                memset(atzfile_name, 0, (strlen(argv[1])+5));//null out the entire string
+                strcpy(atzfile_name, argv[1]);
+                atzfile_name=strcat(atzfile_name, ".atz");
+
+                reconfile_name= new char[strlen(argv[1])+5];
+                memset(reconfile_name, 0, (strlen(argv[1])+5));//null out the entire string
+                strcpy(reconfile_name, argv[1]);
+                reconfile_name=strcat(reconfile_name, ".rec");
+                cout<<"overwriting "<<atzfile_name<<" and "<<reconfile_name<<" if present"<<endl;
+                break;
+            }
+        }
+    }
 	infile.open(infile_name, std::ios::in | std::ios::binary);
 	if (!infile.is_open()) {
        cout << "error: open file for input failed!" << endl;
