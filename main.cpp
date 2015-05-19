@@ -78,6 +78,19 @@ public:
 void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint_fast64_t buffLen);
 bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, uint64_t& total_out);
 void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets);
+int parseOffsetType(int header);
+
+int parseOffsetType(int header){
+    switch (header){
+        case 0x7801 : return 1;  case 0x785e : return 2;  case 0x789c : return 3;  case 0x78da : return 4;
+        case 0x68de : return 5;  case 0x6881 : return 6;  case 0x6843 : return 7;  case 0x6805 : return 8;
+        case 0x58c3 : return 9;  case 0x5885 : return 10; case 0x5847 : return 11; case 0x5809 : return 12;
+        case 0x48c7 : return 13; case 0x4889 : return 14; case 0x484b : return 15; case 0x480d : return 16;
+        case 0x38cb : return 17; case 0x388d : return 18; case 0x384f : return 19; case 0x3811 : return 20;
+        case 0x28cf : return 21; case 0x2891 : return 22; case 0x2853 : return 23; case 0x2815 : return 24;
+    }
+    return 0;
+}
 
 void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint_fast64_t buffLen){
     //this function searches a buffer for zlib headers, count them and fill a vector of fileOffsets
@@ -97,153 +110,16 @@ void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint
     for(i=0;i<redlen;i++){
         //search for 7801, 785E, 789C, 78DA, 68DE, 6881, 6843, 6805, 58C3, 5885, 5847, 5809,
         //           48C7, 4889, 484B, 480D, 38CB, 388D, 384F, 3811, 28CF, 2891, 2853, 2815
-	    int hbits = buffer[i]>>4;//upper 4 bits
-	    int lbits = buffer[i]&15;//lower 4 bits
-        if ((lbits==8)&&(hbits>=2)&&(hbits<=7)){//if the current byte is good check the next byte
-            int v = buffer[i+1];
-            v=(v&(255-32-1))+((v&32)?1:0)+(v&1)*32;//swap 1st and 5th bit
-            if ((v+hbits*4)%62==60){
-                #ifdef debug
-                std::cout<<"Found zlib header("<<std::hex<<std::setfill('0')<<std::uppercase<<std::setw(2)<<(int)buffer[i]
-                <<" "<<std::setw(2)<<(int)buffer[i+1]<<std::dec<<") with "<<(1<<(hbits-2))<<"K window at offset: "<<i<<std::endl;
-                #endif // debug
-                switch(hbits){
-					case 7://hex 78
-					{
-						switch(buffer[i+1]){
-							case 1:{//hex 78 01
-								offsets.push_back(fileOffset(i, 1));
-								break;
-							}
-							case 94:{//hex 78 5E
-								offsets.push_back(fileOffset(i, 2));
-								break;
-							}
-							case 156:{//hex 78 9C
-								offsets.push_back(fileOffset(i, 3));
-								break;
-							}
-							case 218:{//hex 78 DA
-								offsets.push_back(fileOffset(i, 4));
-								break;
-							}
-						}
-						break;//from case 7
-					}
-					case 6://hex 68
-					{
-						switch(buffer[i+1]){
-							case 222:{//hex 68 DE
-								offsets.push_back(fileOffset(i, 5));
-								break;
-							}
-							case 129:{//hex 68 81
-								offsets.push_back(fileOffset(i, 6));
-								break;
-							}
-							case 67:{//hex 68 43
-								offsets.push_back(fileOffset(i, 7));
-								break;
-							}
-							case 5:{//hex 68 05
-								offsets.push_back(fileOffset(i, 8));
-								break;
-							}
-						}
-						break;//from case 6
-					}
-					case 5://hex 58
-					{
-						switch(buffer[i+1]){
-							case 195:{//hex 58 C3
-								offsets.push_back(fileOffset(i, 9));
-								break;
-							}
-							case 133:{//hex 58 85
-								offsets.push_back(fileOffset(i, 10));
-								break;
-							}
-							case 71:{//hex 58 47
-								offsets.push_back(fileOffset(i, 11));
-								break;
-							}
-							case 9:{//hex 58 09
-								offsets.push_back(fileOffset(i, 12));
-								break;
-							}
-						}
-						break;//from case 5
-					}
-					case 4://hex 48
-					{
-						switch(buffer[i+1]){
-							case 199:{//hex 48 C7
-								offsets.push_back(fileOffset(i, 13));
-								break;
-							}
-							case 137:{//hex 48 89
-								offsets.push_back(fileOffset(i, 14));
-								break;
-							}
-							case 75:{//hex 48 4B
-								offsets.push_back(fileOffset(i, 15));;
-								break;
-							}
-							case 13:{//hex 48 0D
-								offsets.push_back(fileOffset(i, 16));
-								break;
-							}
-						}
-						break;//from case 4
-					}
-					case 3://hex 38
-					{
-						switch(buffer[i+1]){
-							case 203:{
-								offsets.push_back(fileOffset(i, 17));
-								break;
-							}
-							case 141:{
-								offsets.push_back(fileOffset(i, 18));
-								break;
-							}
-							case 79:{
-								offsets.push_back(fileOffset(i, 19));
-								break;
-							}
-							case 17:{
-								offsets.push_back(fileOffset(i, 20));
-								break;
-							}
-						}
-						break;//from case 3
-					}
-					case 2://hex 28
-					{
-						switch(buffer[i+1]){
-							case 207:{
-								offsets.push_back(fileOffset(i, 21));
-								break;
-							}
-							case 145:{
-								offsets.push_back(fileOffset(i, 22));
-								break;
-							}
-							case 83:{
-								offsets.push_back(fileOffset(i, 23));
-								break;
-							}
-							case 21:{
-								offsets.push_back(fileOffset(i, 24));
-								break;
-							}
-						}
-						break;//from case 2
-                    }
-                }
+        int header = ((int)buffer[i]) * 256 + (int)buffer[i + 1];
+        int offsetType = parseOffsetType(header);
+        if (offsetType > 0){
+            #ifdef debug
+            std::cout << "Zlib header 0x" << std::hex << std::setfill('0') << std::setw(4) << header << std::dec
+                      << " with " << (1 << ((header >> 12) - 2)) << "K window at offset: " << i << std::endl;
+            #endif // debug
+            offsets.push_back(fileOffset(i, offsetType));
             }
         }
-    }
     #ifdef debug
     std::cout<<std::endl;
 	std::cout<<"Number of collected offsets:"<<offsets.size()<<std::endl;
