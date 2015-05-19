@@ -74,8 +74,42 @@ bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, 
 void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets);
 int parseOffsetType(int header);
 void doDeflate(unsigned char* next_in, uint64_t avail_in, unsigned char*& next_out, uint_fast8_t clvl, uint_fast8_t window, uint_fast8_t memlvl, uint64_t& total_in, uint64_t& total_out);
+int doInflate(unsigned char* next_in, uint64_t avail_in, unsigned char* next_out, uint64_t avail_out, uint64_t& total_in, uint64_t& total_out);
+
+int doInflate(unsigned char* next_in, uint64_t avail_in, unsigned char* next_out, uint64_t avail_out, uint64_t& total_in, uint64_t& total_out){
+    z_stream strm;
+    strm.zalloc = Z_NULL;
+    strm.zfree = Z_NULL;
+    strm.opaque = Z_NULL;
+    strm.avail_in = avail_in;
+    strm.next_in=next_in;
+    //initialize the stream for decompression and check for error
+    int ret=inflateInit(&strm);
+    if (ret != Z_OK){
+        std::cout<<"inflateInit() failed with exit code:"<<ret<<std::endl;//should never happen normally
+        pause();
+        abort();
+    }
+    strm.next_out=next_out;
+    strm.avail_out=avail_out;
+    int ret2=inflate(&strm, Z_FINISH);//try to do the actual decompression in one pass
+    total_in=strm.total_in;
+    total_out=strm.total_out;
+    //deallocate the zlib stream, check for errors and deallocate the decompression buffer
+    ret=inflateEnd(&strm);
+    if (ret!=Z_OK){
+        std::cout<<"inflateEnd() failed with exit code:"<<ret<<std::endl;//should never happen normally
+        pause();
+        abort();
+    }
+    return ret2;
+}
 
 void doDeflate(unsigned char* next_in, uint64_t avail_in, unsigned char*& next_out, uint_fast8_t clvl, uint_fast8_t window, uint_fast8_t memlvl, uint64_t& total_in, uint64_t& total_out){
+    //this function takes avail_in bytes from next_in, deflates them using the clvl, window and memlvl parameters
+    //allocates a new array and puts the pointer in next_out, and fills this array with the result of the compression
+    //the consumed input and produced output byte counts are written in total_in and total_out
+    //the dynamic array allocated by this function must be manually deleted to avoid a memory leak
     z_stream strm;
     strm.zalloc = Z_NULL;
     strm.zfree = Z_NULL;
@@ -408,30 +442,15 @@ int main(int argc, char* argv[]) {
             j=concentrate;
             numGoodOffsets=concentrate;
         }
-        //reset the Zlib stream to do decompression
-        strm.zalloc = Z_NULL;
-        strm.zfree = Z_NULL;
-        strm.opaque = Z_NULL;
         fullmatch=false;
         memlevel=9;
         window=15;
-        //the lengths of the zlib streams have been saved by the previous phase
-        strm.avail_in = streamOffsetList[j].streamLength;
-        strm.next_in=rBuffer+streamOffsetList[j].offset;//this is effectively adding an integer to a pointer, resulting in a pointer
-        //initialize the stream for decompression and check for error
-        ret=inflateInit(&strm);
-        if (ret != Z_OK)
-        {
-            cout<<"inflateInit() failed with exit code:"<<ret<<endl;//should never happen normally
-            pause();
-            abort();
-        }
         //a buffer needs to be created to hold the resulting decompressed data
         //since we have already deompressed the data before, we know exactly how large of a buffer we need to allocate
+        //the lengths of the zlib streams have been saved by the previous phase
         unsigned char* decompBuffer= new unsigned char[streamOffsetList[j].inflatedLength];
-        strm.next_out=decompBuffer;
-        strm.avail_out=streamOffsetList[j].inflatedLength;
-        ret=inflate(&strm, Z_FINISH);//try to do the actual decompression in one pass
+        uint64_t inflate_in, inflate_out;
+        ret=doInflate((rBuffer+streamOffsetList[j].offset), streamOffsetList[j].streamLength, decompBuffer, streamOffsetList[j].inflatedLength, inflate_in, inflate_out);
         //check the return value
         switch (ret){
             case Z_STREAM_END: //decompression was succesful
@@ -745,14 +764,6 @@ int main(int argc, char* argv[]) {
                 pause();
                 abort();
             }
-        }
-        //deallocate the zlib stream, check for errors and deallocate the decompression buffer
-        ret=inflateEnd(&strm);
-        if (ret!=Z_OK)
-        {
-            cout<<"inflateEnd() failed with exit code:"<<ret<<endl;//should never happen normally
-            pause();
-            abort();
         }
         delete [] decompBuffer;
     }
