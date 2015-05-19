@@ -74,6 +74,48 @@ bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, 
 void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets);
 int parseOffsetType(int header);
 
+void doDeflate(unsigned char* next_in, uint64_t avail_in, unsigned char*& next_out, uint_fast8_t clvl, uint_fast8_t window, uint_fast8_t memlvl, uint64_t& total_in, uint64_t& total_out){
+    z_stream strm;
+    strm.zalloc = Z_NULL;
+    strm.zfree = Z_NULL;
+    strm.opaque = Z_NULL;
+    strm.next_in=next_in;
+    #ifdef debug
+    std::cout<<"-------------------------"<<std::endl;
+    std::cout<<"   memlevel:"<<+memlvl<<std::endl;
+    std::cout<<"   clevel:"<<+clvl<<std::endl;
+    std::cout<<"   window:"<<+window<<std::endl;
+    #endif // debug
+    //use all default settings except clevel and memlevel
+    int ret = deflateInit2(&strm, clvl, Z_DEFLATED, window, memlvl, Z_DEFAULT_STRATEGY);
+    if (ret != Z_OK){
+        std::cout<<"deflateInit() failed with exit code:"<<ret<<std::endl;//should never happen normally
+        pause();
+        abort();
+    }
+    //prepare for compressing in one pass
+    strm.avail_in=avail_in;
+    next_out=new unsigned char[deflateBound(&strm, avail_in)]; //allocate output for worst case
+    strm.avail_out=deflateBound(&strm, avail_in);
+    strm.next_out=next_out;
+    ret=deflate(&strm, Z_FINISH);//do the actual compression
+    //check the return value to see if everything went well
+    if (ret != Z_STREAM_END){
+        std::cout<<"deflate() failed with exit code:"<<ret<<std::endl;
+        pause();
+        abort();
+    }
+    total_in=strm.total_in;
+    total_out=strm.total_out;
+    //deallocate the Zlib stream and check if it went well
+    ret=deflateEnd(&strm);
+    if (ret != Z_OK){
+        std::cout<<"deflateEnd() failed with exit code:"<<ret<<std::endl;//should never happen normally
+        pause();
+        abort();
+    }
+}
+
 int parseOffsetType(int header){
     switch (header){
         case 0x7801 : return 1;  case 0x785e : return 2;  case 0x789c : return 3;  case 0x78da : return 4;
@@ -414,45 +456,17 @@ int main(int argc, char* argv[]) {
                         do {
                             clevel=9;
                             do {
-                                //resetting the variables
-                                strm1.zalloc = Z_NULL;
-                                strm1.zfree = Z_NULL;
-                                strm1.opaque = Z_NULL;
-                                strm1.next_in=decompBuffer;
+                                unsigned char* recompBuffer;
+                                uint64_t total_in, total_out;//fill recompBuffer with the recompressed data
+                                doDeflate(decompBuffer, streamOffsetList[j].inflatedLength, recompBuffer, clevel, window, memlevel, total_in, total_out);
                                 #ifdef debug
-                                cout<<"-------------------------"<<endl;
-                                cout<<"   memlevel:"<<memlevel<<endl;
-                                cout<<"   clevel:"<<clevel<<endl;
-                                cout<<"   window:"<<window<<endl;
-                                #endif // debug
-                                //use all default settings except clevel and memlevel
-                                ret = deflateInit2(&strm1, clevel, Z_DEFLATED, window, memlevel, Z_DEFAULT_STRATEGY);
-                                if (ret != Z_OK)
-                                {
-                                    cout<<"deflateInit() failed with exit code:"<<ret<<endl;//should never happen normally
-                                    pause();
-                                    abort();
-                                }
-                                //prepare for compressing in one pass
-                                strm1.avail_in=streamOffsetList[j].inflatedLength;
-                                unsigned char* recompBuffer=new unsigned char[deflateBound(&strm1, streamOffsetList[j].inflatedLength)]; //allocate output for worst case
-                                strm1.avail_out=deflateBound(&strm1, streamOffsetList[j].inflatedLength);
-                                strm1.next_out=recompBuffer;
-                                ret=deflate(&strm1, Z_FINISH);//do the actual compression
-                                //check the return value to see if everything went well
-                                if (ret != Z_STREAM_END){
-                                    cout<<"recompression failed with exit code:"<<ret<<endl;
-                                    pause();
-                                    abort();
-                                }
-                                #ifdef debug
-                                cout<<"   size difference: "<<(strm1.total_out-static_cast<int64_t>(streamOffsetList[j].streamLength))<<endl;
+                                cout<<"   size difference: "<<(static_cast<int64_t>(total_out)-static_cast<int64_t>(streamOffsetList[j].streamLength))<<endl;
                                 #endif // debug
                                 uint64_t smaller;
                                 identicalBytes=0;
-                                if (abs((strm1.total_out-streamOffsetList[j].streamLength))<=sizediffTresh){//if the size difference is not more than the treshold
-                                    if (strm1.total_out<streamOffsetList[j].streamLength){//this is to prevent an array overread
-                                        smaller=strm1.total_out;
+                                if (abs((total_out-streamOffsetList[j].streamLength))<=sizediffTresh){//if the size difference is not more than the treshold
+                                    if (total_out<streamOffsetList[j].streamLength){//this is to prevent an array overread
+                                        smaller=total_out;
                                     } else {
                                         smaller=streamOffsetList[j].streamLength;
                                     }
@@ -496,16 +510,16 @@ int main(int argc, char* argv[]) {
                                                     }
                                                 }
                                             }
-                                            if (strm1.total_out<streamOffsetList[j].streamLength){//if the recompressed stream is shorter we need to add bytes after diffing
-                                                for (i=0; i<(streamOffsetList[j].streamLength-strm1.total_out); i++){//adding bytes
-                                                    if ((i==0)&&((last_i+1)<strm1.total_out)){//if the last byte of the recompressed stream was a match
-                                                        streamOffsetList[j].diffByteOffsets.push_back(strm1.total_out-last_i);
+                                            if (total_out<streamOffsetList[j].streamLength){//if the recompressed stream is shorter we need to add bytes after diffing
+                                                for (i=0; i<(streamOffsetList[j].streamLength-total_out); i++){//adding bytes
+                                                    if ((i==0)&&((last_i+1)<total_out)){//if the last byte of the recompressed stream was a match
+                                                        streamOffsetList[j].diffByteOffsets.push_back(total_out-last_i);
                                                     } else{
                                                         streamOffsetList[j].diffByteOffsets.push_back(1);
                                                     }
-                                                    streamOffsetList[j].diffByteVal.push_back(rBuffer[(i+strm1.total_out+streamOffsetList[j].offset)]);
+                                                    streamOffsetList[j].diffByteVal.push_back(rBuffer[(i+total_out+streamOffsetList[j].offset)]);
                                                     #ifdef debug
-                                                    cout<<"   byte at the end added :"<<+rBuffer[(i+strm1.total_out+streamOffsetList[j].offset)]<<endl;
+                                                    cout<<"   byte at the end added :"<<+rBuffer[(i+total_out+streamOffsetList[j].offset)]<<endl;
                                                     #endif // debug
                                                 }
                                             }
@@ -517,14 +531,6 @@ int main(int argc, char* argv[]) {
                                     cout<<"   size difference is greater than "<<sizediffTresh<<" bytes, not comparing"<<endl;
                                 }
                                 #endif // debug
-                                //deallocate the Zlib stream and check if it went well
-                                ret=deflateEnd(&strm1);
-                                if (ret != Z_OK)
-                                {
-                                    cout<<"deflateInit() failed with exit code:"<<ret<<endl;//should never happen normally
-                                    pause();
-                                    abort();
-                                }
                                 clevel--;
                                 delete [] recompBuffer;
                                 #ifdef debug
