@@ -73,6 +73,7 @@ void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint
 bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, uint64_t& total_out);
 void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets);
 int parseOffsetType(int header);
+void doDeflate(unsigned char* next_in, uint64_t avail_in, unsigned char*& next_out, uint_fast8_t clvl, uint_fast8_t window, uint_fast8_t memlvl, uint64_t& total_in, uint64_t& total_out);
 
 void doDeflate(unsigned char* next_in, uint64_t avail_in, unsigned char*& next_out, uint_fast8_t clvl, uint_fast8_t window, uint_fast8_t memlvl, uint64_t& total_in, uint64_t& total_out){
     z_stream strm;
@@ -263,7 +264,6 @@ int main(int argc, char* argv[]) {
     int clevel=9;
     int window=15;
     bool fullmatch=false;
-    z_stream strm1;
     uint64_t recomp=0;
 
     int recompTresh=128;//streams are only recompressed if the best match differs from the original in <= recompTresh bytes
@@ -483,7 +483,7 @@ int main(int argc, char* argv[]) {
                                         streamOffsetList[j].firstDiffByte=-1;
                                         streamOffsetList[j].diffByteOffsets.clear();
                                         streamOffsetList[j].diffByteVal.clear();
-                                        uint64_t last_i;
+                                        uint64_t last_i=0;
                                         if (identicalBytes==streamOffsetList[j].streamLength){//if we have a full match set the flag to bail from the nested loops
                                             #ifdef debug
                                             cout<<"   recompression succesful, full match"<<endl;
