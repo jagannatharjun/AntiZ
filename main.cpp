@@ -10,6 +10,11 @@
 #define default_atzfile "atztest.atz"
 #define default_reconfile "recon.bin"
 
+int recompTresh=128;//streams are only recompressed if the best match differs from the original in <= recompTresh bytes
+int sizediffTresh=128;//streams are only compared when the size difference is <= sizediffTresh
+int shortcutTresh=256;//only try recompressing the entire stream, if we gat at least this many matches by compressing the
+int shortcutLength=1024;//first shortcutLength bytes
+
 void pause(){
     std::string dummy;
     std::cout << "Press enter to continue...";
@@ -294,10 +299,6 @@ int main(int argc, char* argv[]) {
     bool fullmatch=false;
     uint64_t recomp=0;
 
-    int recompTresh=128;//streams are only recompressed if the best match differs from the original in <= recompTresh bytes
-    int sizediffTresh=128;//streams are only compared when the size difference is <= sizediffTresh
-    int shortcutTresh=256;//only try recompressing the entire stream, if we gat at least this many matches by compressing the
-    int shortcutLength=1024;//first shortcutLength bytes
     //DO NOT turn off slowmode, the alternative code (optimized mode) does not work at all
     bool slowmode=true;//slowmode bruteforces the zlib parameters, optimized mode only tries probable parameters based on the 2-byte header
     int_fast64_t concentrate=-1;//only try to recompress the stream# givel here, negative values disable this and run on all streams
