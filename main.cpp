@@ -12,8 +12,8 @@
 
 int recompTresh=128;//streams are only recompressed if the best match differs from the original in <= recompTresh bytes
 int sizediffTresh=128;//streams are only compared when the size difference is <= sizediffTresh
-int shortcutTresh=256;//only try recompressing the entire stream, if we get at least this many matches by compressing the
-uint_fast16_t shortcutLength=1024;//first shortcutLength bytes
+bool shortcutEnabled=true;//enable speedup shortcut in slow mode
+uint_fast16_t shortcutLength=1024;//stop compression and count mismatches after this many bytes, if we get more than recompTresh then bail early
 int mismatchTol=2;//if there are at most this many mismatches consider the stream a full match and stop looking for better parameters
 
 void pauser(){
@@ -110,7 +110,7 @@ bool testparams(unsigned char rBuffer[], unsigned char decompBuffer[], std::vect
     strm.next_out= recompBuffer;
     bool doFullStream=true;
     bool shortcut=false;
-    if ((shortcutTresh>=0)&&(streamOffsetList[j].streamLength>shortcutLength)){//if the stream is big and shortcuts are enabled
+    if ((shortcutEnabled)&&(streamOffsetList[j].streamLength>shortcutLength)){//if the stream is big and shortcuts are enabled
         shortcut=true;
         identBytes=0;
         strm.avail_out= shortcutLength;//only get a portion of the compressed data
@@ -128,7 +128,7 @@ bool testparams(unsigned char rBuffer[], unsigned char decompBuffer[], std::vect
                 identBytes++;
             }
         }
-        if (identBytes<shortcutTresh) doFullStream=false;
+        if (identBytes<(shortcutLength-recompTresh)) doFullStream=false;//if we have too many mismatches bail early
         #ifdef debug
         std::cout<<"   shortcut: "<<identBytes<<" bytes out of "<<strm.total_out<<" identical"<<std::endl;
         #endif // debug
