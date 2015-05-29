@@ -12,8 +12,8 @@
 
 int recompTresh=128;//streams are only recompressed if the best match differs from the original in <= recompTresh bytes
 int sizediffTresh=128;//streams are only compared when the size difference is <= sizediffTresh
-int shortcutTresh=256;//only try recompressing the entire stream, if we gat at least this many matches by compressing the
-int shortcutLength=1024;//first shortcutLength bytes
+int shortcutTresh=256;//only try recompressing the entire stream, if we get at least this many matches by compressing the
+uint_fast16_t shortcutLength=1024;//first shortcutLength bytes
 int mismatchTol=2;//if there are at most this many mismatches consider the stream a full match and stop looking for better parameters
 
 void pauser(){
@@ -152,80 +152,80 @@ bool testparams(unsigned char rBuffer[], unsigned char decompBuffer[], std::vect
         #endif // debug
         uint64_t smaller;
         if (abs((strm.total_out-streamOffsetList[j].streamLength))<=sizediffTresh){//if the size difference is not more than the treshold
-                                        if (strm.total_out<streamOffsetList[j].streamLength){//this is to prevent an array overread
-                                            smaller=strm.total_out;
-                                        } else {
-                                            smaller=streamOffsetList[j].streamLength;
-                                        }
-                                        for (i=0; i<smaller;i++){
-                                            if (recompBuffer[i]==rBuffer[(i+streamOffsetList[j].offset)]){
-                                                identBytes++;
-                                            }
-                                        }
-                                        if (identBytes>streamOffsetList[j].identBytes){//if this recompressed stream has more matching bytes than the previous best
-                                            streamOffsetList[j].identBytes=identBytes;
-                                            streamOffsetList[j].clevel=clevel;
-                                            streamOffsetList[j].memlvl=memlevel;
-                                            streamOffsetList[j].window=window;
-                                            streamOffsetList[j].firstDiffByte=-1;
-                                            streamOffsetList[j].diffByteOffsets.clear();
-                                            streamOffsetList[j].diffByteVal.clear();
-                                            uint64_t last_i=0;
-                                            if (identBytes==streamOffsetList[j].streamLength){//if we have a full match set the flag to bail from the nested loops
-                                                #ifdef debug
-                                                std::cout<<"   recompression succesful, full match"<<std::endl;
-                                                #endif // debug
-                                                fullmatch=true;
-                                            } else {//there are different bytes and/or bytes at the end
-                                                if (identBytes+mismatchTol>=streamOffsetList[j].streamLength) fullmatch=true;//if at most mismatchTol bytes diff bail from the loop
-                                                for (i=0; i<smaller;i++){//diff it
-                                                    if (recompBuffer[i]!=rBuffer[(i+streamOffsetList[j].offset)]){//if a mismatching byte is found
-                                                        if (streamOffsetList[j].firstDiffByte<0){//if the first different byte is negative, then this is the first
-                                                            streamOffsetList[j].firstDiffByte=(i);
-                                                            streamOffsetList[j].diffByteOffsets.push_back(0);
-                                                            streamOffsetList[j].diffByteVal.push_back(rBuffer[(i+streamOffsetList[j].offset)]);
-                                                            #ifdef debug
-                                                            std::cout<<"   first diff byte:"<<i<<std::endl;
-                                                            #endif // debug
-                                                            last_i=i;
-                                                        } else {
-                                                            streamOffsetList[j].diffByteOffsets.push_back(i-last_i);
-                                                            streamOffsetList[j].diffByteVal.push_back(rBuffer[(i+streamOffsetList[j].offset)]);
-                                                            //cout<<"   different byte:"<<i<<endl;
-                                                            last_i=i;
-                                                        }
-                                                    }
-                                                }
-                                                if (strm.total_out<streamOffsetList[j].streamLength){//if the recompressed stream is shorter we need to add bytes after diffing
-                                                    for (i=0; i<(streamOffsetList[j].streamLength-strm.total_out); i++){//adding bytes
-                                                        if ((i==0)&&((last_i+1)<strm.total_out)){//if the last byte of the recompressed stream was a match
-                                                            streamOffsetList[j].diffByteOffsets.push_back(strm.total_out-last_i);
-                                                        } else{
-                                                            streamOffsetList[j].diffByteOffsets.push_back(1);
-                                                        }
-                                                        streamOffsetList[j].diffByteVal.push_back(rBuffer[(i+strm.total_out+streamOffsetList[j].offset)]);
-                                                        #ifdef debug
-                                                        std::cout<<"   byte at the end added :"<<+rBuffer[(i+strm.total_out+streamOffsetList[j].offset)]<<std::endl;
-                                                        #endif // debug
-                                                    }
-                                                }
-                                            }
-                                        }
-                                    }
+            if (strm.total_out<streamOffsetList[j].streamLength){//this is to prevent an array overread
+                smaller=strm.total_out;
+            } else {
+                smaller=streamOffsetList[j].streamLength;
+            }
+            for (i=0; i<smaller;i++){
+                if (recompBuffer[i]==rBuffer[(i+streamOffsetList[j].offset)]){
+                    identBytes++;
+                }
+            }
+            if (identBytes>streamOffsetList[j].identBytes){//if this recompressed stream has more matching bytes than the previous best
+                streamOffsetList[j].identBytes=identBytes;
+                streamOffsetList[j].clevel=clevel;
+                streamOffsetList[j].memlvl=memlevel;
+                streamOffsetList[j].window=window;
+                streamOffsetList[j].firstDiffByte=-1;
+                streamOffsetList[j].diffByteOffsets.clear();
+                streamOffsetList[j].diffByteVal.clear();
+                uint64_t last_i=0;
+                if (identBytes==streamOffsetList[j].streamLength){//if we have a full match set the flag to bail from the nested loops
+                    #ifdef debug
+                    std::cout<<"   recompression succesful, full match"<<std::endl;
+                    #endif // debug
+                    fullmatch=true;
+                } else {//there are different bytes and/or bytes at the end
+                    if (identBytes+mismatchTol>=streamOffsetList[j].streamLength) fullmatch=true;//if at most mismatchTol bytes diff bail from the loop
+                        for (i=0; i<smaller;i++){//diff it
+                            if (recompBuffer[i]!=rBuffer[(i+streamOffsetList[j].offset)]){//if a mismatching byte is found
+                                if (streamOffsetList[j].firstDiffByte<0){//if the first different byte is negative, then this is the first
+                                    streamOffsetList[j].firstDiffByte=(i);
+                                    streamOffsetList[j].diffByteOffsets.push_back(0);
+                                    streamOffsetList[j].diffByteVal.push_back(rBuffer[(i+streamOffsetList[j].offset)]);
                                     #ifdef debug
-                                    else{
-                                        std::cout<<"   size difference is greater than "<<sizediffTresh<<" bytes, not comparing"<<std::endl;
-                                    }
+                                    std::cout<<"   first diff byte:"<<i<<std::endl;
                                     #endif // debug
+                                    last_i=i;
+                                } else {
+                                    streamOffsetList[j].diffByteOffsets.push_back(i-last_i);
+                                    streamOffsetList[j].diffByteVal.push_back(rBuffer[(i+streamOffsetList[j].offset)]);
+                                    //cout<<"   different byte:"<<i<<endl;
+                                    last_i=i;
                                 }
-                                ret=deflateEnd(&strm);
-                                if ((ret != Z_OK)&&!((ret==Z_DATA_ERROR) && (!doFullStream))){//Z_DATA_ERROR is only acceptable if we skipped the full recompression
-                                    std::cout<<"deflateEnd() failed with exit code:"<<ret<<std::endl;//should never happen normally
-                                    pauser();
-                                    abort();
+                            }
+                        }
+                        if (strm.total_out<streamOffsetList[j].streamLength){//if the recompressed stream is shorter we need to add bytes after diffing
+                            for (i=0; i<(streamOffsetList[j].streamLength-strm.total_out); i++){//adding bytes
+                                if ((i==0)&&((last_i+1)<strm.total_out)){//if the last byte of the recompressed stream was a match
+                                    streamOffsetList[j].diffByteOffsets.push_back(strm.total_out-last_i);
+                                } else{
+                                    streamOffsetList[j].diffByteOffsets.push_back(1);
                                 }
-                                delete [] recompBuffer;
-                                return fullmatch;
+                                streamOffsetList[j].diffByteVal.push_back(rBuffer[(i+strm.total_out+streamOffsetList[j].offset)]);
+                                #ifdef debug
+                                std::cout<<"   byte at the end added :"<<+rBuffer[(i+strm.total_out+streamOffsetList[j].offset)]<<std::endl;
+                                #endif // debug
+                            }
+                        }
+                    }
+                }
+            }
+            #ifdef debug
+            else{
+                std::cout<<"   size difference is greater than "<<sizediffTresh<<" bytes, not comparing"<<std::endl;
+            }
+            #endif // debug
+        }
+    ret=deflateEnd(&strm);
+    if ((ret != Z_OK)&&!((ret==Z_DATA_ERROR) && (!doFullStream))){//Z_DATA_ERROR is only acceptable if we skipped the full recompression
+        std::cout<<"deflateEnd() failed with exit code:"<<ret<<std::endl;//should never happen normally
+        pauser();
+        abort();
+    }
+    delete [] recompBuffer;
+    return fullmatch;
 }
 
 int doInflate(unsigned char* next_in, uint64_t avail_in, unsigned char* next_out, uint64_t avail_out, uint64_t& total_in, uint64_t& total_out){
@@ -391,6 +391,9 @@ bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, 
 }
 
 void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets){
+    //this function takes a vector of fileOffsets, a buffer of bufflen length and tests if the offsets in the fileOffset vector
+    //are marking the beginning of a valid zlib stream
+    //the offsets, types, lengths and inflated lengths of valid zlib streams are pused to a vector of streamOffsets
 	uint64_t numOffsets=fileoffsets.size();
 	uint64_t lastGoodOffset=0;
 	uint64_t lastStreamLength=0;
