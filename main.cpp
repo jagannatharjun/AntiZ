@@ -153,6 +153,9 @@ void findDeflateParams(unsigned char rBuffer[], std::vector<streamOffset>& strea
             }
         }
         delete [] decompBuffer;
+        if (((streamOffsetList[j].streamLength-streamOffsetList[j].identBytes)<=recompTresh)&&(streamOffsetList[j].identBytes>0)){
+            streamOffsetList[j].recomp=true;
+        }
     }
 }
 
@@ -682,7 +685,6 @@ int main(int argc, char* argv[]) {
     for (j=0; j<streamOffsetList.size(); j++){
         if (((streamOffsetList[j].streamLength-streamOffsetList[j].identBytes)<=recompTresh)&&(streamOffsetList[j].identBytes>0)){
             recomp++;
-            streamOffsetList[j].recomp=true;
         }
     }
     cout<<"recompressed:"<<recomp<<"/"<<streamOffsetList.size()<<endl;
