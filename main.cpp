@@ -85,9 +85,9 @@ void doDeflate(unsigned char* next_in, uint64_t avail_in, unsigned char*& next_o
 int doInflate(unsigned char* next_in, uint64_t avail_in, unsigned char* next_out, uint64_t avail_out);
 bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], std::vector<streamOffset>& offsets, uint64_t offsetno, uint8_t clevel, uint8_t window, uint8_t memlevel);
 void findDeflateParams(unsigned char rBuffer[], std::vector<streamOffset>& streamOffsetList);
-bool testParamRange(unsigned char origbuff[], unsigned char decompbuff[], std::vector<streamOffset>& offsets, uint64_t offsetno, uint8_t clevel_min, uint8_t clevel_max,
-                    uint8_t window_min, uint8_t window_max, uint8_t memlevel_min, uint8_t memlevel_max)
-{
+
+
+bool testParamRange(unsigned char origbuff[], unsigned char decompbuff[], std::vector<streamOffset>& offsets, uint64_t offsetno, uint8_t clevel_min, uint8_t clevel_max, uint8_t window_min, uint8_t window_max, uint8_t memlevel_min, uint8_t memlevel_max){
     uint8_t clevel, memlevel, window;
     bool fullmatch;
     for(window=window_max; window>=window_min; window--){
@@ -108,6 +108,8 @@ bool testParamRange(unsigned char origbuff[], unsigned char decompbuff[], std::v
 }
 
 void findDeflateParams(unsigned char rBuffer[], std::vector<streamOffset>& streamOffsetList){
+    //this function takes a buffer and a vector containing information about the valid zlib streams in the buffer
+    //it tries to find the best parameters for recompression, the results are stored in the vector
     uint64_t j;
     uint64_t numOffsets=streamOffsetList.size();
     for (j=0; j<numOffsets; j++){
@@ -389,7 +391,7 @@ int parseOffsetType(int header){
         case 0x6805 : return 16; case 0x6843 : return 17; case 0x6881 : return 18; case 0x68de : return 19;
         case 0x7801 : return 20; case 0x785e : return 21; case 0x789c : return 22; case 0x78da : return 23;
     }
-    return 0;
+    return -1;
 }
 
 void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint_fast64_t buffLen){
@@ -412,7 +414,7 @@ void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint
         //           48C7, 4889, 484B, 480D, 38CB, 388D, 384F, 3811, 28CF, 2891, 2853, 2815
         int header = ((int)buffer[i]) * 256 + (int)buffer[i + 1];
         int offsetType = parseOffsetType(header);
-        if (offsetType > 0){
+        if (offsetType >= 0){
             #ifdef debug
             std::cout << "Zlib header 0x" << std::hex << std::setfill('0') << std::setw(4) << header << std::dec
                       << " with " << (1 << ((header >> 12) - 2)) << "K window at offset: " << i << std::endl;
