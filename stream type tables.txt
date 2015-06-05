@@ -15,3 +15,12 @@ used by: clevel 6
 stream type 4:
 32K window, slow compression, hex 78 DA
 used by: clevel 7-9
+
+16K window
+
+fastest, hex 68 05, used by clevel 0-1
+fast, hex 68 43, used by clevel 2-5
+default, hex 68 81, used by clevel 6
+slow, hex 68 DE, used by clevel 7-9
+
+other window sizes, strategies and memlevels are assumed to use the same scheme (fastest 0-1, fast 2-5, default 6, slow 7-9)

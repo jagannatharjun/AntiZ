@@ -84,6 +84,28 @@ int parseOffsetType(int header);
 void doDeflate(unsigned char* next_in, uint64_t avail_in, unsigned char*& next_out, uint_fast8_t clvl, uint_fast8_t window, uint_fast8_t memlvl, uint64_t& total_in, uint64_t& total_out);
 int doInflate(unsigned char* next_in, uint64_t avail_in, unsigned char* next_out, uint64_t avail_out);
 bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], std::vector<streamOffset>& offsets, uint64_t offsetno, uint8_t clevel, uint8_t window, uint8_t memlevel);
+void findDeflateParams(unsigned char rBuffer[], std::vector<streamOffset>& streamOffsetList);
+bool testParamRange(unsigned char origbuff[], unsigned char decompbuff[], std::vector<streamOffset>& offsets, uint64_t offsetno, uint8_t clevel_min, uint8_t clevel_max,
+                    uint8_t window_min, uint8_t window_max, uint8_t memlevel_min, uint8_t memlevel_max)
+{
+    uint8_t clevel, memlevel, window;
+    bool fullmatch;
+    for(window=window_max; window>=window_min; window--){
+        for(memlevel=memlevel_max; memlevel>=memlevel_min; memlevel--){
+            for(clevel=clevel_max; clevel>=clevel_min; clevel--){
+                fullmatch=testDeflateParams(origbuff, decompbuff, offsets, offsetno, clevel, window, memlevel);
+                if (fullmatch){
+                    #ifdef debug
+                    std::cout<<"   recompression succesful within tolerance, bailing"<<std::endl;
+                    #endif // debug
+                    return true;
+                }
+
+            }
+        }
+    }
+    return false;
+}
 
 void findDeflateParams(unsigned char rBuffer[], std::vector<streamOffset>& streamOffsetList){
     uint64_t j;
@@ -93,10 +115,6 @@ void findDeflateParams(unsigned char rBuffer[], std::vector<streamOffset>& strea
             j=concentrate;
             numOffsets=concentrate;
         }
-        bool fullmatch=false;
-        uint8_t memlevel=9;
-        uint8_t window=15;
-        uint8_t clevel=9;
         //a buffer needs to be created to hold the resulting decompressed data
         //since we have already deompressed the data before, we know exactly how large of a buffer we need to allocate
         //the lengths of the zlib streams have been saved by the previous phase
@@ -111,26 +129,9 @@ void findDeflateParams(unsigned char rBuffer[], std::vector<streamOffset>& strea
                 std::cout<<"stream #"<<j<<"("<<streamOffsetList[j].offset<<")"<<" ready for recompression trials"<<std::endl;
                 #endif // debug
                 #ifdef debug
-                std::cout<<"   entering slow mode"<<std::endl;
                 std::cout<<"   stream type: "<<streamOffsetList[j].offsetType<<std::endl;
                 #endif // debug
-                do{
-                    memlevel=9;
-                    do {
-                        clevel=9;
-                        do {
-                            fullmatch=testDeflateParams(rBuffer, decompBuffer, streamOffsetList, j, clevel, window, memlevel);
-                            #ifdef debug
-                            if (fullmatch){
-                                std::cout<<"   recompression succesful within tolerance, bailing"<<std::endl;
-                            }
-                            #endif // debug
-                            clevel--;
-                        } while ((!fullmatch)&&(clevel>=1));
-                        memlevel--;
-                    } while ((!fullmatch)&&(memlevel>=1));
-                    window--;
-                } while ((!fullmatch)&&(window>=10));
+                testParamRange(rBuffer, decompBuffer, streamOffsetList, j, 1, 9, 10, 15, 1, 9);
                 break;
             }
             case Z_DATA_ERROR: //the compressed data was invalid, this should never happen since the offsets have been checked
@@ -160,6 +161,8 @@ void findDeflateParams(unsigned char rBuffer[], std::vector<streamOffset>& strea
 }
 
 bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], std::vector<streamOffset>& offsets, uint64_t offsetno, uint8_t clevel, uint8_t window, uint8_t memlevel){
+    //tests if the supplied deflate params(clevel, memlevel, window) are better for recompressing the given streamoffset
+    //if yes, then update the streamoffset object to the new best values, and if mismatch is within tolerance then return true
     int ret;
     uint64_t i;
     bool fullmatch=false;
@@ -239,6 +242,9 @@ bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], std
                     identBytes++;
                 }
             }
+            #ifdef debug
+            std::cout<<"   diffBytes: "<<(offsets[offsetno].streamLength-identBytes)<<std::endl;
+            #endif // debug
             if (identBytes>offsets[offsetno].identBytes){//if this recompressed stream has more matching bytes than the previous best
                 offsets[offsetno].identBytes=identBytes;
                 offsets[offsetno].clevel=clevel;
