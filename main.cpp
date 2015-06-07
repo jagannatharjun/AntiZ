@@ -13,8 +13,9 @@
 uint_fast16_t recompTresh=128;//streams are only recompressed if the best match differs from the original in <= recompTresh bytes
 int sizediffTresh=128;//streams are only compared when the size difference is <= sizediffTresh
 bool shortcutEnabled=true;//enable speedup shortcut in slow mode
-uint_fast16_t shortcutLength=1024;//stop compression and count mismatches after this many bytes, if we get more than recompTresh then bail early
+uint_fast16_t shortcutLength=512;//stop compression and count mismatches after this many bytes, if we get more than recompTresh then bail early
 uint_fast16_t mismatchTol=2;//if there are at most this many mismatches consider the stream a full match and stop looking for better parameters
+bool slowmode=false;//slowmode bruteforces the zlib parameters, optimized mode only tries probable parameters based on the 2-byte header
 
 int_fast64_t concentrate=-1;//only try to recompress the stream# givel here, negative values disable this and run on all streams, debug tool
 
@@ -126,14 +127,102 @@ void findDeflateParams(unsigned char rBuffer[], std::vector<streamOffset>& strea
         switch (ret){
             case Z_STREAM_END: //decompression was succesful
             {
+                uint8_t window= 10 + (streamOffsetList[j].offsetType / 4);
+                uint8_t crange = streamOffsetList[j].offsetType % 4;
                 #ifdef debug
                 std::cout<<std::endl;
                 std::cout<<"stream #"<<j<<"("<<streamOffsetList[j].offset<<")"<<" ready for recompression trials"<<std::endl;
-                #endif // debug
-                #ifdef debug
                 std::cout<<"   stream type: "<<streamOffsetList[j].offsetType<<std::endl;
+                std::cout<<"   window and crange from header: "<<+window<<" ; "<<+crange<<std::endl;
+                pauser();
                 #endif // debug
-                testParamRange(rBuffer, decompBuffer, streamOffsetList, j, 1, 9, 10, 15, 1, 9);
+                //try the most probable parameters first(supplied by header or default)
+                switch (crange){//we need to switch based on the clevel
+                    case 0:{//if the header signals fastest compression try clevel 1, header-supplied window and default memlvl(8)
+                        #ifdef debug
+                        std::cout<<"   trying most probable parameters: fastest compression"<<std::endl;
+                        #endif // debug
+                        if (testDeflateParams(rBuffer, decompBuffer, streamOffsetList, j, 1, window, 8)) break;
+                        //if the most probable parameters are not succesful, try all different clevel and memlevel combinations
+                        #ifdef debug
+                        std::cout<<"   trying less probable parameters: fastest compression"<<std::endl;
+                        #endif // debug
+                        if (testDeflateParams(rBuffer, decompBuffer, streamOffsetList, j, 1, window, 9)) break;//try all memlvls for the most probable clvl
+                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList, j, 1, 1, window, window, 1, 7)) break;
+                        //try all clvl/memlvl combinations that have not been tried yet
+                        testParamRange(rBuffer, decompBuffer, streamOffsetList, j, 2, 9, window, window, 1, 9);
+                        break;
+                    }
+                    case 1:{//if the header signals fast compression try clevel 2-5, header-supplied window and default memlvl(8)
+                        #ifdef debug
+                        std::cout<<"   trying most probable parameters: fast compression"<<std::endl;
+                        #endif // debug
+                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList, j, 2, 5, window, window, 8, 8)) break;
+                        //if the most probable parameters are not succesful, try all different clevel and memlevel combinations
+                        #ifdef debug
+                        std::cout<<"   trying less probable parameters: fast compression"<<std::endl<<std::endl;
+                        #endif // debug
+                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList, j, 2, 5, window, window, 1, 7)) break;
+                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList, j, 2, 5, window, window, 9, 9)) break;
+
+                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList, j, 1, 1, window, window, 1, 9)) break;
+                        testParamRange(rBuffer, decompBuffer, streamOffsetList, j, 6, 9, window, window, 1, 9);
+                        break;
+                    }
+                    case 2:{//if the header signals default compression only try clevel 6, header-supplied window and default memlvl(8)
+                        #ifdef debug
+                        std::cout<<"   trying most probable parameters: default compression"<<std::endl;
+                        #endif // debug
+                        if (testDeflateParams(rBuffer, decompBuffer, streamOffsetList, j, 6, window, 8)) break;
+                        //if the most probable parameters are not succesful, try all different clevel and memlevel combinations
+                        #ifdef debug
+                        std::cout<<"   trying less probable parameters: default compression"<<std::endl<<std::endl;
+                        #endif // debug
+                        if (testDeflateParams(rBuffer, decompBuffer, streamOffsetList, j, 6, window, 9)) break;
+                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList, j, 6, 6, window, window, 1, 7)) break;
+
+                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList, j, 1, 5, window, window, 1, 9)) break;
+                        testParamRange(rBuffer, decompBuffer, streamOffsetList, j, 7, 9, window, window, 1, 9);
+                        break;
+                    }
+                    case 3:{//if the header signals best compression only try clevel 7-9, header-supplied window and default memlvl(8)
+                        #ifdef debug
+                        std::cout<<"   trying most probable parameters: best compression"<<std::endl;
+                        #endif // debug
+                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList, j, 7, 9, window, window, 8, 8)) break;
+                        //if the most probable parameters are not succesful, try all different clevel and memlevel combinations
+                        #ifdef debug
+                        std::cout<<"   trying less probable parameters: best compression"<<std::endl<<std::endl;
+                        #endif // debug
+                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList, j, 7, 9, window, window, 1, 7)) break;
+                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList, j, 7, 9, window, window, 9, 9)) break;
+
+                        testParamRange(rBuffer, decompBuffer, streamOffsetList, j, 1, 6, window, window, 1, 9);
+                        break;
+                    }
+                }
+
+                #ifdef debug
+                pauser();
+                #endif // debug
+                //if bruteforcing is turned on and needed, try all remaining combinations
+                if (((streamOffsetList[j].streamLength-streamOffsetList[j].identBytes)>=mismatchTol)&&(slowmode)){//if bruteforcing is turned on try all remaining combinations
+                    std::cout<<"bruteforcing strm #"<<j<<std::endl;
+                    if (window==10){
+                        testParamRange(rBuffer, decompBuffer, streamOffsetList, j, 1, 9, 11, 15, 1, 9);
+                    }else{
+                        if (window==15){
+                            testParamRange(rBuffer, decompBuffer, streamOffsetList, j, 1, 9, 10, 14, 1, 9);
+                        }else{//if window is in the 11-14 range
+                            if (testParamRange(rBuffer, decompBuffer, streamOffsetList, j, 1, 9, 10, (window-1), 1, 9)) break;
+                            testParamRange(rBuffer, decompBuffer, streamOffsetList, j, 1, 9, (window+1), 15, 1, 9);
+                        }
+                    }
+                }
+                //if (((streamOffsetList[j].streamLength-streamOffsetList[j].identBytes)>=mismatchTol)&&(slowmode)) testParamRange(rBuffer, decompBuffer, streamOffsetList, j, 1, 9, 10, 15, 1, 9);
+                #ifdef debug
+                pauser();
+                #endif // debug
                 break;
             }
             case Z_DATA_ERROR: //the compressed data was invalid, this should never happen since the offsets have been checked
@@ -155,10 +244,10 @@ void findDeflateParams(unsigned char rBuffer[], std::vector<streamOffset>& strea
                 abort();
             }
         }
-        delete [] decompBuffer;
         if (((streamOffsetList[j].streamLength-streamOffsetList[j].identBytes)<=recompTresh)&&(streamOffsetList[j].identBytes>0)){
             streamOffsetList[j].recomp=true;
         }
+        delete [] decompBuffer;
     }
 }
 
@@ -382,6 +471,13 @@ void doDeflate(unsigned char* next_in, uint64_t avail_in, unsigned char*& next_o
     }
 }
 
+// A zlib stream has the following structure: (http://tools.ietf.org/html/rfc1950)
+//  +---+---+   CMF: bits 0 to 3  CM      Compression method (8 = deflate)
+//  |CMF|FLG|        bits 4 to 7  CINFO   Compression info (base-2 logarithm of the LZ77 window size minus 8)
+//  +---+---+
+//              FLG: bits 0 to 4  FCHECK  Check bits for CMF and FLG (in MSB order (CMF*256 + FLG) is a multiple of 31)
+//                   bit  5       FDICT   Preset dictionary
+//                   bits 6 to 7  FLEVEL  Compression level (0 = fastest, 1 = fast, 2 = default, 3 = maximum)
 int parseOffsetType(int header){
     switch (header){
         case 0x2815 : return 0;  case 0x2853 : return 1;  case 0x2891 : return 2;  case 0x28cf : return 3;
@@ -527,9 +623,6 @@ int main(int argc, char* argv[]) {
     int_fast64_t numFullmatch=0;
     #endif // debug
     uint64_t recomp=0;
-
-    //DO NOT turn off slowmode, the alternative code (optimized mode) does not work at all
-    bool slowmode=true;//slowmode bruteforces the zlib parameters, optimized mode only tries probable parameters based on the 2-byte header
 
 
 	//PHASE 0
