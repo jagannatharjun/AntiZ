@@ -134,7 +134,6 @@ void findDeflateParams(unsigned char rBuffer[], std::vector<streamOffset>& strea
                 std::cout<<"stream #"<<j<<"("<<streamOffsetList[j].offset<<")"<<" ready for recompression trials"<<std::endl;
                 std::cout<<"   stream type: "<<streamOffsetList[j].offsetType<<std::endl;
                 std::cout<<"   window and crange from header: "<<+window<<" ; "<<+crange<<std::endl;
-                pauser();
                 #endif // debug
                 //try the most probable parameters first(supplied by header or default)
                 switch (crange){//we need to switch based on the clevel
@@ -201,10 +200,6 @@ void findDeflateParams(unsigned char rBuffer[], std::vector<streamOffset>& strea
                         break;
                     }
                 }
-
-                #ifdef debug
-                pauser();
-                #endif // debug
                 //if bruteforcing is turned on and needed, try all remaining combinations
                 if (((streamOffsetList[j].streamLength-streamOffsetList[j].identBytes)>=mismatchTol)&&(slowmode)){//if bruteforcing is turned on try all remaining combinations
                     std::cout<<"bruteforcing strm #"<<j<<std::endl;
@@ -219,10 +214,6 @@ void findDeflateParams(unsigned char rBuffer[], std::vector<streamOffset>& strea
                         }
                     }
                 }
-                //if (((streamOffsetList[j].streamLength-streamOffsetList[j].identBytes)>=mismatchTol)&&(slowmode)) testParamRange(rBuffer, decompBuffer, streamOffsetList, j, 1, 9, 10, 15, 1, 9);
-                #ifdef debug
-                pauser();
-                #endif // debug
                 break;
             }
             case Z_DATA_ERROR: //the compressed data was invalid, this should never happen since the offsets have been checked
