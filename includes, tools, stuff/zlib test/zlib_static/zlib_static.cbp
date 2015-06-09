@@ -1,0 +1,105 @@
+<?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
+<CodeBlocks_project_file>
+	<FileVersion major="1" minor="6" />
+	<Project>
+		<Option title="zlib_static" />
+		<Option pch_mode="2" />
+		<Option compiler="gcc" />
+		<Build>
+			<Target title="Release">
+				<Option output="bin/Release/zlib_static" prefix_auto="1" extension_auto="1" />
+				<Option working_dir="" />
+				<Option object_output="obj/Release/" />
+				<Option type="2" />
+				<Option compiler="gcc" />
+				<Option createDefFile="1" />
+				<Compiler>
+					<Add option="-march=core2" />
+					<Add option="-O3" />
+					<Add option="-pedantic" />
+					<Add option="-Wextra" />
+					<Add option="-Wall" />
+					<Add option="-g" />
+				</Compiler>
+			</Target>
+			<Target title="Release32">
+				<Option output="bin/Release32/zlib_static" prefix_auto="1" extension_auto="1" />
+				<Option working_dir="" />
+				<Option object_output="obj/Release32/" />
+				<Option type="2" />
+				<Option compiler="gcc" />
+				<Option createDefFile="1" />
+				<Compiler>
+					<Add option="-march=core2" />
+					<Add option="-O3" />
+					<Add option="-pedantic" />
+					<Add option="-Wextra" />
+					<Add option="-Wall" />
+					<Add option="-g" />
+					<Add option="-m32" />
+				</Compiler>
+			</Target>
+		</Build>
+		<Unit filename="../zlib128/adler32.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../zlib128/compress.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../zlib128/crc32.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../zlib128/crc32.h" />
+		<Unit filename="../zlib128/deflate.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../zlib128/deflate.h" />
+		<Unit filename="../zlib128/gzclose.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../zlib128/gzguts.h" />
+		<Unit filename="../zlib128/gzlib.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../zlib128/gzread.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../zlib128/gzwrite.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../zlib128/infback.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../zlib128/inffast.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../zlib128/inffast.h" />
+		<Unit filename="../zlib128/inffixed.h" />
+		<Unit filename="../zlib128/inflate.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../zlib128/inflate.h" />
+		<Unit filename="../zlib128/inftrees.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../zlib128/inftrees.h" />
+		<Unit filename="../zlib128/trees.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../zlib128/trees.h" />
+		<Unit filename="../zlib128/uncompr.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../zlib128/zconf.h" />
+		<Unit filename="../zlib128/zlib.h" />
+		<Unit filename="../zlib128/zutil.c">
+			<Option compilerVar="CC" />
+		</Unit>
+		<Unit filename="../zlib128/zutil.h" />
+		<Extensions>
+			<code_completion />
+			<envvars />
+			<debugger />
+		</Extensions>
+	</Project>
+</CodeBlocks_project_file>

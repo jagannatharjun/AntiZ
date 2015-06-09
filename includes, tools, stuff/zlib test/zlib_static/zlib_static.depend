@@ -1,0 +1,116 @@
+# depslib dependency file v1.0
+1421679461 source:c:\users\szuperhab\desktop\prog\zlib test\zlib128\adler32.c
+	"zutil.h"
+
+1421679462 c:\users\szuperhab\desktop\prog\zlib test\zlib128\zutil.h
+	"zlib.h"
+	<stddef.h>
+	<string.h>
+	<stdlib.h>
+	<alloc.h>
+	<malloc.h>
+	<malloc.h>
+	<unix.h>
+	<stdio.h>
+
+1431205045 c:\users\szuperhab\desktop\prog\zlib test\zlib128\zlib.h
+	"zconf.h"
+
+1421679462 c:\users\szuperhab\desktop\prog\zlib test\zlib128\zconf.h
+	<windows.h>
+	<limits.h>
+	<sys/types.h>
+	<stdarg.h>
+	<stddef.h>
+	<unistd.h>
+	<unixio.h>
+
+1421679461 source:c:\users\szuperhab\desktop\prog\zlib test\zlib128\compress.c
+	"zlib.h"
+
+1421679461 source:c:\users\szuperhab\desktop\prog\zlib test\zlib128\crc32.c
+	<stdio.h>
+	"zutil.h"
+	"crc32.h"
+
+1421679461 c:\users\szuperhab\desktop\prog\zlib test\zlib128\crc32.h
+
+1421679461 source:c:\users\szuperhab\desktop\prog\zlib test\zlib128\deflate.c
+	"deflate.h"
+
+1421679461 c:\users\szuperhab\desktop\prog\zlib test\zlib128\deflate.h
+	"zutil.h"
+
+1421679461 source:c:\users\szuperhab\desktop\prog\zlib test\zlib128\gzclose.c
+	"gzguts.h"
+
+1421679461 c:\users\szuperhab\desktop\prog\zlib test\zlib128\gzguts.h
+	<stdio.h>
+	"zlib.h"
+	<string.h>
+	<stdlib.h>
+	<limits.h>
+	<fcntl.h>
+	<stddef.h>
+	<io.h>
+	<windows.h>
+	<errno.h>
+
+1421679461 source:c:\users\szuperhab\desktop\prog\zlib test\zlib128\gzlib.c
+	"gzguts.h"
+
+1421679461 source:c:\users\szuperhab\desktop\prog\zlib test\zlib128\gzread.c
+	"gzguts.h"
+
+1421679461 source:c:\users\szuperhab\desktop\prog\zlib test\zlib128\gzwrite.c
+	"gzguts.h"
+	<stdarg.h>
+
+1421679461 source:c:\users\szuperhab\desktop\prog\zlib test\zlib128\infback.c
+	"zutil.h"
+	"inftrees.h"
+	"inflate.h"
+	"inffast.h"
+	"inffixed.h"
+
+1421679461 c:\users\szuperhab\desktop\prog\zlib test\zlib128\inftrees.h
+
+1421679461 c:\users\szuperhab\desktop\prog\zlib test\zlib128\inflate.h
+
+1421679461 c:\users\szuperhab\desktop\prog\zlib test\zlib128\inffast.h
+
+1421679461 c:\users\szuperhab\desktop\prog\zlib test\zlib128\inffixed.h
+
+1421679461 source:c:\users\szuperhab\desktop\prog\zlib test\zlib128\inffast.c
+	"zutil.h"
+	"inftrees.h"
+	"inflate.h"
+	"inffast.h"
+
+1421679461 source:c:\users\szuperhab\desktop\prog\zlib test\zlib128\inflate.c
+	"zutil.h"
+	"inftrees.h"
+	"inflate.h"
+	"inffast.h"
+	"inffixed.h"
+	<stdio.h>
+
+1421679461 source:c:\users\szuperhab\desktop\prog\zlib test\zlib128\inftrees.c
+	"zutil.h"
+	"inftrees.h"
+
+1421679461 source:c:\users\szuperhab\desktop\prog\zlib test\zlib128\trees.c
+	"deflate.h"
+	<ctype.h>
+	"trees.h"
+	<stdio.h>
+
+1421679462 c:\users\szuperhab\desktop\prog\zlib test\zlib128\trees.h
+
+1421679462 source:c:\users\szuperhab\desktop\prog\zlib test\zlib128\uncompr.c
+	"zlib.h"
+
+1421679462 source:c:\users\szuperhab\desktop\prog\zlib test\zlib128\zutil.c
+	"zutil.h"
+	"gzguts.h"
+
