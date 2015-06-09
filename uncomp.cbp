@@ -17,7 +17,7 @@
 				<Option object_output="obj/Debug/" />
 				<Option type="1" />
 				<Option compiler="gcc" />
-				<Option parameters="pdf.bin" />
+				<Option parameters="-i pdf.bin" />
 				<Compiler>
 					<Add option="-march=core2" />
 					<Add option="-pg" />
@@ -34,7 +34,7 @@
 				<Option object_output="obj/Release/" />
 				<Option type="1" />
 				<Option compiler="gcc" />
-				<Option parameters="pdf.bin" />
+				<Option parameters="-i pdf.bin" />
 				<Compiler>
 					<Add option="-march=core2" />
 					<Add option="-O3" />
@@ -49,7 +49,7 @@
 				<Option object_output="obj/Release32/" />
 				<Option type="1" />
 				<Option compiler="gcc" />
-				<Option parameters="pdf.bin" />
+				<Option parameters="-i pdf.bin" />
 				<Option projectLinkerOptionsRelation="1" />
 				<Compiler>
 					<Add option="-march=core2" />
@@ -68,11 +68,36 @@
 			<Add option="-Wextra" />
 			<Add option="-Wall" />
 			<Add directory="../zlib test/zlib128" />
+			<Add directory="../tclap/tclap-1.2.1/include" />
 		</Compiler>
 		<Linker>
 			<Add library="..\zlib test\zlib_static\bin\Release\libzlib_static.a" />
 			<Add directory="../zlib test/zlib128" />
 		</Linker>
+		<Unit filename="../tclap/tclap-1.2.1/include/tclap/Arg.h" />
+		<Unit filename="../tclap/tclap-1.2.1/include/tclap/ArgException.h" />
+		<Unit filename="../tclap/tclap-1.2.1/include/tclap/ArgTraits.h" />
+		<Unit filename="../tclap/tclap-1.2.1/include/tclap/CmdLine.h" />
+		<Unit filename="../tclap/tclap-1.2.1/include/tclap/CmdLineInterface.h" />
+		<Unit filename="../tclap/tclap-1.2.1/include/tclap/CmdLineOutput.h" />
+		<Unit filename="../tclap/tclap-1.2.1/include/tclap/Constraint.h" />
+		<Unit filename="../tclap/tclap-1.2.1/include/tclap/DocBookOutput.h" />
+		<Unit filename="../tclap/tclap-1.2.1/include/tclap/HelpVisitor.h" />
+		<Unit filename="../tclap/tclap-1.2.1/include/tclap/IgnoreRestVisitor.h" />
+		<Unit filename="../tclap/tclap-1.2.1/include/tclap/MultiArg.h" />
+		<Unit filename="../tclap/tclap-1.2.1/include/tclap/MultiSwitchArg.h" />
+		<Unit filename="../tclap/tclap-1.2.1/include/tclap/OptionalUnlabeledTracker.h" />
+		<Unit filename="../tclap/tclap-1.2.1/include/tclap/StandardTraits.h" />
+		<Unit filename="../tclap/tclap-1.2.1/include/tclap/StdOutput.h" />
+		<Unit filename="../tclap/tclap-1.2.1/include/tclap/SwitchArg.h" />
+		<Unit filename="../tclap/tclap-1.2.1/include/tclap/UnlabeledMultiArg.h" />
+		<Unit filename="../tclap/tclap-1.2.1/include/tclap/UnlabeledValueArg.h" />
+		<Unit filename="../tclap/tclap-1.2.1/include/tclap/ValueArg.h" />
+		<Unit filename="../tclap/tclap-1.2.1/include/tclap/ValuesConstraint.h" />
+		<Unit filename="../tclap/tclap-1.2.1/include/tclap/VersionVisitor.h" />
+		<Unit filename="../tclap/tclap-1.2.1/include/tclap/Visitor.h" />
+		<Unit filename="../tclap/tclap-1.2.1/include/tclap/XorHandler.h" />
+		<Unit filename="../tclap/tclap-1.2.1/include/tclap/ZshCompletionOutput.h" />
 		<Unit filename="main.cpp" />
 		<Extensions>
 			<code_completion />
