@@ -2,7 +2,6 @@
 #include <fstream>
 #include <vector>
 #include <cmath>
-#include <cstring>
 #include <string>
 #include <iomanip>
 #include <zlib.h>
@@ -24,12 +23,6 @@ std::string infile_name;
 std::string reconfile_name;
 std::string atzfile_name;
 bool recon=false;
-
-void pauser(){
-    std::string dummy;
-    std::cout << "Press enter to continue...";
-    std::getline(std::cin, dummy);
-}
 
 class fileOffset{
 public:
@@ -75,7 +68,7 @@ public:
     uint8_t clevel;
     uint8_t window;
     uint8_t memlvl;
-    int_fast64_t identBytes;
+    uint64_t identBytes;
     int_fast64_t firstDiffByte;//the offset of the first byte that does not match, relative to stream start, not file start
     std::vector<int_fast64_t> diffByteOffsets;//offsets of bytes that differ, this is an incremental offset list to enhance recompression, kinda like a PNG filter
     //this improves compression if the mismatching bytes are consecutive, eg. 451,452,453,...(no repetitions, hard to compress)
@@ -84,6 +77,9 @@ public:
     bool recomp;
     unsigned char* atzInfos;
 };
+
+inline void pauser();
+void parseCLI(int argc, char* argv[]);
 void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint_fast64_t buffLen);
 bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, uint64_t& total_out);
 void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets);
@@ -92,9 +88,68 @@ void doDeflate(unsigned char* next_in, uint64_t avail_in, unsigned char*& next_o
 int doInflate(unsigned char* next_in, uint64_t avail_in, unsigned char* next_out, uint64_t avail_out);
 bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], std::vector<streamOffset>& offsets, uint64_t offsetno, uint8_t clevel, uint8_t window, uint8_t memlevel);
 void findDeflateParams(unsigned char rBuffer[], std::vector<streamOffset>& streamOffsetList);
+inline bool testParamRange(unsigned char origbuff[], unsigned char decompbuff[], std::vector<streamOffset>& offsets, uint64_t offsetno, uint8_t clevel_min, uint8_t clevel_max, uint8_t window_min, uint8_t window_max, uint8_t memlevel_min, uint8_t memlevel_max);
 
+void parseCLI(int argc, char* argv[]){
+    // Wrap everything in a try block.  Do this every time,
+	// because exceptions will be thrown for problems.
+	try{
+        // Define the command line object.
+        TCLAP::CmdLine cmd("Visit https://github.com/Diazonium/AntiZ for source code and support.", ' ', "0.1.2-git");
 
-bool testParamRange(unsigned char origbuff[], unsigned char decompbuff[], std::vector<streamOffset>& offsets, uint64_t offsetno, uint8_t clevel_min, uint8_t clevel_max, uint8_t window_min, uint8_t window_max, uint8_t memlevel_min, uint8_t memlevel_max){
+        // Define a value argument and add it to the command line. This defines the input file.
+        TCLAP::ValueArg<std::string> infileArg("i", "input", "Input file name", true, "", "string");
+        cmd.add(infileArg);
+
+        // Define the output file. This is optional, if not provided then it will be generated from the input file name.
+        TCLAP::ValueArg<std::string> outfileArg("o", "output", "Output file name", false, "", "string");
+        cmd.add(outfileArg);
+
+        // Define a switch and add it to the command line.
+        TCLAP::SwitchArg reconSwitch("r", "reconstruct", "Assume the input file is an ATZ file and attempt to reconstruct the original file from it", false);
+        cmd.add(reconSwitch);
+
+        // Parse the args.
+        cmd.parse( argc, argv );
+
+        std::cout<<"Input file: "<<infileArg.getValue()<<std::endl;
+
+        recon = reconSwitch.getValue();//check if we need to reconstruct only
+        if (recon){
+            std::cout<<"assuming input file is an ATZ file, attempting to reconstruct"<<std::endl;
+            atzfile_name= infileArg.getValue();
+            if (outfileArg.isSet()){//if the output is specified use that
+                reconfile_name= outfileArg.getValue();
+            }else{//if not, append .rec to the input file name
+                reconfile_name= atzfile_name;
+                reconfile_name.append(".rec");
+            }
+            std::cout<<"overwriting "<<reconfile_name<<" if present"<<std::endl;
+        }else{
+            infile_name= infileArg.getValue();
+            if (outfileArg.isSet()){//if the output is specified use that
+                atzfile_name= outfileArg.getValue();
+            }else{//if not, append .atz to the input file name
+                atzfile_name= infile_name;
+                atzfile_name.append(".atz");
+            }
+            reconfile_name= infile_name;
+            reconfile_name.append(".rec");
+            std::cout<<"overwriting "<<atzfile_name<<" and "<<reconfile_name<<" if present"<<std::endl;
+        }
+	} catch (TCLAP::ArgException &e){  // catch any exceptions
+        std::cout << "error: " << e.error() << " for arg " << e.argId() << std::endl;
+    }
+}
+
+inline void pauser(){
+    std::string dummy;
+    std::cout << "Press enter to continue...";
+    std::getline(std::cin, dummy);
+}
+
+inline bool testParamRange(unsigned char origbuff[], unsigned char decompbuff[], std::vector<streamOffset>& offsets, uint64_t offsetno, uint8_t clevel_min, uint8_t clevel_max, uint8_t window_min, uint8_t window_max, uint8_t memlevel_min, uint8_t memlevel_max){
+    //this function tests a given range of deflate parameters
     uint8_t clevel, memlevel, window;
     bool fullmatch;
     for(window=window_max; window>=window_min; window--){
@@ -205,6 +260,9 @@ void findDeflateParams(unsigned char rBuffer[], std::vector<streamOffset>& strea
                         testParamRange(rBuffer, decompBuffer, streamOffsetList, j, 1, 6, window, window, 1, 9);
                         break;
                     }
+                    default:{//this should never happen
+                        abort();
+                    }
                 }
                 //if bruteforcing is turned on and needed, try all remaining combinations
                 if (((streamOffsetList[j].streamLength-streamOffsetList[j].identBytes)>=mismatchTol)&&(bruteforceWindow)){//if bruteforcing is turned on try all remaining combinations
@@ -269,7 +327,6 @@ bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], std
     ret = deflateInit2(&strm, clevel, Z_DEFLATED, window, memlevel, Z_DEFAULT_STRATEGY);
     if (ret != Z_OK){//initialize it and check for error
         std::cout<<"deflateInit() failed with exit code:"<<ret<<std::endl;//should never happen normally
-        pauser();
         abort();
     }
     //create a buffer to hold the recompressed data
@@ -285,7 +342,6 @@ bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], std
         ret=deflate(&strm, Z_FINISH);
         if ((ret!=Z_STREAM_END)&&(ret!=Z_OK)){//most of the times the compressed data wont fit and we get Z_OK
             std::cout<<"deflate() in shorcut failed with exit code:"<<ret<<std::endl;//should never happen normally
-            pauser();
             abort();
         }
         #ifdef debug
@@ -312,7 +368,6 @@ bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], std
         //check the return value to see if everything went well
         if (ret != Z_STREAM_END){
             std::cout<<"deflate() failed with exit code:"<<ret<<std::endl;
-            pauser();
             abort();
         }
         #ifdef debug
@@ -392,7 +447,6 @@ bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], std
     ret=deflateEnd(&strm);
     if ((ret != Z_OK)&&!((ret==Z_DATA_ERROR) && (!doFullStream))){//Z_DATA_ERROR is only acceptable if we skipped the full recompression
         std::cout<<"deflateEnd() failed with exit code:"<<ret<<std::endl;//should never happen normally
-        pauser();
         abort();
     }
     delete [] recompBuffer;
@@ -412,7 +466,6 @@ int doInflate(unsigned char* next_in, uint64_t avail_in, unsigned char* next_out
     int ret=inflateInit(&strm);
     if (ret != Z_OK){
         std::cout<<"inflateInit() failed with exit code:"<<ret<<std::endl;//should never happen normally
-        pauser();
         abort();
     }
     strm.next_out=next_out;
@@ -422,7 +475,6 @@ int doInflate(unsigned char* next_in, uint64_t avail_in, unsigned char* next_out
     ret=inflateEnd(&strm);
     if (ret!=Z_OK){
         std::cout<<"inflateEnd() failed with exit code:"<<ret<<std::endl;//should never happen normally
-        pauser();
         abort();
     }
     return ret2;
@@ -442,7 +494,6 @@ void doDeflate(unsigned char* next_in, uint64_t avail_in, unsigned char*& next_o
     int ret = deflateInit2(&strm, clvl, Z_DEFLATED, window, memlvl, Z_DEFAULT_STRATEGY);
     if (ret != Z_OK){
         std::cout<<"deflateInit() failed with exit code:"<<ret<<std::endl;//should never happen normally
-        pauser();
         abort();
     }
     //prepare for compressing in one pass
@@ -454,7 +505,6 @@ void doDeflate(unsigned char* next_in, uint64_t avail_in, unsigned char*& next_o
     //check the return value to see if everything went well
     if (ret != Z_STREAM_END){
         std::cout<<"deflate() failed with exit code:"<<ret<<std::endl;
-        pauser();
         abort();
     }
     total_in=strm.total_in;
@@ -463,7 +513,6 @@ void doDeflate(unsigned char* next_in, uint64_t avail_in, unsigned char*& next_o
     ret=deflateEnd(&strm);
     if (ret != Z_OK){
         std::cout<<"deflateEnd() failed with exit code:"<<ret<<std::endl;//should never happen normally
-        pauser();
         abort();
     }
 }
@@ -483,8 +532,8 @@ int parseOffsetType(int header){
         case 0x5809 : return 12; case 0x5847 : return 13; case 0x5885 : return 14; case 0x58c3 : return 15;
         case 0x6805 : return 16; case 0x6843 : return 17; case 0x6881 : return 18; case 0x68de : return 19;
         case 0x7801 : return 20; case 0x785e : return 21; case 0x789c : return 22; case 0x78da : return 23;
+        default: return -1;
     }
-    return -1;
 }
 
 void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint_fast64_t buffLen){
@@ -539,7 +588,6 @@ bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, 
 		int ret=inflateInit(&strm);
 		if (ret != Z_OK){
 			std::cout<<"inflateInit() failed with exit code:"<<ret<<std::endl;
-			pauser();
 			abort();
 		}
         //a buffer needs to be created to hold the resulting decompressed data
@@ -558,7 +606,6 @@ bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, 
         //deallocate the zlib stream, check for errors and deallocate the decompression buffer
         if (inflateEnd(&strm)!=Z_OK){
 			std::cout<<"inflateEnd() failed with exit code:"<<ret<<std::endl;//should never happen normally
-            pauser();
             abort();
         }
         delete [] decompBuffer;
@@ -607,6 +654,7 @@ int main(int argc, char* argv[]) {
 	uint_fast64_t i,j;
 	std::ifstream infile;
 	std::ofstream outfile;
+	uint64_t infileSize;
 	vector<fileOffset> offsetList;//offsetList stores memory offsets where potential headers can be found, and the type of the offset
 	vector<streamOffset> streamOffsetList;//streamOffsetList stores offsets of confirmed zlib streams and a bunch of data on them
 	z_stream strm;
@@ -625,61 +673,12 @@ int main(int argc, char* argv[]) {
 	//PHASE 0
 	//parse CLI arguments, open input file and read it into memory
 
-	uint64_t infileSize;
-	//make sure they do not hold any uninitialized data
+	//make sure the file name stings do not hold any uninitialized data
 	infile_name.clear();
 	reconfile_name.clear();
 	atzfile_name.clear();
-
-	// Wrap everything in a try block.  Do this every time,
-	// because exceptions will be thrown for problems.
-	try{
-        // Define the command line object.
-        TCLAP::CmdLine cmd("Visit https://github.com/Diazonium/AntiZ for source code and support.", ' ', "0.1.2-git");
-
-        // Define a value argument and add it to the command line. This defines the input file.
-        TCLAP::ValueArg<std::string> infileArg("i", "input", "Input file name", true, "", "string");
-        cmd.add(infileArg);
-
-        // Define the output file. This is optional, if not provided then it will be generated from the input file name.
-        TCLAP::ValueArg<std::string> outfileArg("o", "output", "Output file name", false, "", "string");
-        cmd.add(outfileArg);
-
-        // Define a switch and add it to the command line.
-        TCLAP::SwitchArg reconSwitch("r", "reconstruct", "Assume the input file is an ATZ file and attempt to reconstruct the original file from it", false);
-        cmd.add(reconSwitch);
-
-        // Parse the args.
-        cmd.parse( argc, argv );
-
-        std::cout<<"Input file: "<<infileArg.getValue()<<std::endl;
-
-        recon = reconSwitch.getValue();//check if we need to reconstruct only
-        if (recon){
-            cout<<"assuming input file is an ATZ file, attempting to reconstruct"<<endl;
-            atzfile_name= infileArg.getValue();
-            if (outfileArg.isSet()){//if the output is specified use that
-                reconfile_name= outfileArg.getValue();
-            }else{//if not, append .rec to the input file name
-                reconfile_name= atzfile_name;
-                reconfile_name.append(".rec");
-            }
-            cout<<"overwriting "<<reconfile_name<<" if present"<<endl;
-        }else{
-            infile_name= infileArg.getValue();
-            if (outfileArg.isSet()){//if the output is specified use that
-                atzfile_name= outfileArg.getValue();
-            }else{//if not, append .atz to the input file name
-                atzfile_name= infile_name;
-                atzfile_name.append(".atz");
-            }
-            reconfile_name= infile_name;
-            reconfile_name.append(".rec");
-            cout<<"overwriting "<<atzfile_name<<" and "<<reconfile_name<<" if present"<<endl;
-        }
-	} catch (TCLAP::ArgException &e){  // catch any exceptions
-        cout << "error: " << e.error() << " for arg " << e.argId() << endl;
-    }
+    //parse CLI arguments and if needed jump to reconstruction
+	parseCLI(argc, argv);
     if (recon) goto PHASE5;
 
 	infile.open(infile_name, std::ios::in | std::ios::binary);
@@ -754,6 +753,9 @@ int main(int argc, char* argv[]) {
         }
     }
     cout<<"recompressed:"<<recomp<<"/"<<streamOffsetList.size()<<endl;
+    if ((recomp<streamOffsetList.size())&&(!bruteforceWindow)){
+        std::cout<<"Some streams could not be recompressed. Bruteforcing window size may or may not help."<<std::endl;
+    }
 
     #ifdef debug
     pauser();
@@ -1158,8 +1160,5 @@ int main(int argc, char* argv[]) {
     pauser();
     #endif // debug
     delete [] atzBuffer;
-    /*delete [] infile_name;
-    delete [] atzfile_name;
-    delete [] reconfile_name;*/
 	return 0;
 }

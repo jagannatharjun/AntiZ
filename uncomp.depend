@@ -1,12 +1,14 @@
 # depslib dependency file v1.0
-1433712016 source:c:\users\szuperhab\desktop\prog\uncomp\main.cpp
+1433870989 source:c:\users\szuperhab\desktop\prog\uncomp\main.cpp
 	<iostream>
 	<fstream>
 	<vector>
 	<cmath>
 	<cstring>
+	<string>
 	<iomanip>
 	<zlib.h>
+	<tclap/CmdLine.h>
 
 1431205045 c:\users\szuperhab\desktop\prog\zlib test\zlib128\zlib.h
 	"zconf.h"
@@ -19,4 +21,152 @@
 	<stddef.h>
 	<unistd.h>
 	<unixio.h>
+
+1302372335 c:\users\szuperhab\desktop\prog\tclap\tclap-1.2.1\include\tclap\cmdline.h
+	<tclap/SwitchArg.h>
+	<tclap/MultiSwitchArg.h>
+	<tclap/UnlabeledValueArg.h>
+	<tclap/UnlabeledMultiArg.h>
+	<tclap/XorHandler.h>
+	<tclap/HelpVisitor.h>
+	<tclap/VersionVisitor.h>
+	<tclap/IgnoreRestVisitor.h>
+	<tclap/CmdLineOutput.h>
+	<tclap/StdOutput.h>
+	<tclap/Constraint.h>
+	<tclap/ValuesConstraint.h>
+	<string>
+	<vector>
+	<list>
+	<iostream>
+	<iomanip>
+	<algorithm>
+	<stdlib.h>
+
+1294017646 c:\users\szuperhab\desktop\prog\tclap\tclap-1.2.1\include\tclap\switcharg.h
+	<string>
+	<vector>
+	<tclap/Arg.h>
+
+1302480521 c:\users\szuperhab\desktop\prog\tclap\tclap-1.2.1\include\tclap\arg.h
+	<config.h>
+	<string>
+	<vector>
+	<list>
+	<iostream>
+	<iomanip>
+	<cstdio>
+	<sstream>
+	<strstream>
+	<tclap/ArgException.h>
+	<tclap/Visitor.h>
+	<tclap/CmdLineInterface.h>
+	<tclap/ArgTraits.h>
+	<tclap/StandardTraits.h>
+
+1171727640 c:\users\szuperhab\desktop\prog\tclap\tclap-1.2.1\include\tclap\argexception.h
+	<string>
+	<exception>
+
+1142712995 c:\users\szuperhab\desktop\prog\tclap\tclap-1.2.1\include\tclap\visitor.h
+
+1231549557 c:\users\szuperhab\desktop\prog\tclap\tclap-1.2.1\include\tclap\cmdlineinterface.h
+	<string>
+	<vector>
+	<list>
+	<iostream>
+	<algorithm>
+
+1295117117 c:\users\szuperhab\desktop\prog\tclap\tclap-1.2.1\include\tclap\argtraits.h
+
+1294001574 c:\users\szuperhab\desktop\prog\tclap\tclap-1.2.1\include\tclap\standardtraits.h
+	<config.h>
+
+1231549557 c:\users\szuperhab\desktop\prog\tclap\tclap-1.2.1\include\tclap\multiswitcharg.h
+	<string>
+	<vector>
+	<tclap/SwitchArg.h>
+
+1247670584 c:\users\szuperhab\desktop\prog\tclap\tclap-1.2.1\include\tclap\unlabeledvaluearg.h
+	<string>
+	<vector>
+	<tclap/ValueArg.h>
+	<tclap/OptionalUnlabeledTracker.h>
+
+1293997847 c:\users\szuperhab\desktop\prog\tclap\tclap-1.2.1\include\tclap\valuearg.h
+	<string>
+	<vector>
+	<tclap/Arg.h>
+	<tclap/Constraint.h>
+
+1140523515 c:\users\szuperhab\desktop\prog\tclap\tclap-1.2.1\include\tclap\constraint.h
+	<string>
+	<vector>
+	<list>
+	<iostream>
+	<iomanip>
+	<algorithm>
+
+1190926182 c:\users\szuperhab\desktop\prog\tclap\tclap-1.2.1\include\tclap\optionalunlabeledtracker.h
+	<string>
+
+1171727992 c:\users\szuperhab\desktop\prog\tclap\tclap-1.2.1\include\tclap\unlabeledmultiarg.h
+	<string>
+	<vector>
+	<tclap/MultiArg.h>
+	<tclap/OptionalUnlabeledTracker.h>
+
+1293997847 c:\users\szuperhab\desktop\prog\tclap\tclap-1.2.1\include\tclap\multiarg.h
+	<string>
+	<vector>
+	<tclap/Arg.h>
+	<tclap/Constraint.h>
+
+1294017646 c:\users\szuperhab\desktop\prog\tclap\tclap-1.2.1\include\tclap\xorhandler.h
+	<tclap/Arg.h>
+	<string>
+	<vector>
+	<algorithm>
+	<iostream>
+
+1293997847 c:\users\szuperhab\desktop\prog\tclap\tclap-1.2.1\include\tclap\helpvisitor.h
+	<tclap/CmdLineInterface.h>
+	<tclap/CmdLineOutput.h>
+	<tclap/Visitor.h>
+
+1142712995 c:\users\szuperhab\desktop\prog\tclap\tclap-1.2.1\include\tclap\cmdlineoutput.h
+	<string>
+	<vector>
+	<list>
+	<iostream>
+	<iomanip>
+	<algorithm>
+
+1293997847 c:\users\szuperhab\desktop\prog\tclap\tclap-1.2.1\include\tclap\versionvisitor.h
+	<tclap/CmdLineInterface.h>
+	<tclap/CmdLineOutput.h>
+	<tclap/Visitor.h>
+
+1095526461 c:\users\szuperhab\desktop\prog\tclap\tclap-1.2.1\include\tclap\ignorerestvisitor.h
+	<tclap/Visitor.h>
+	<tclap/Arg.h>
+
+1302373832 c:\users\szuperhab\desktop\prog\tclap\tclap-1.2.1\include\tclap\stdoutput.h
+	<string>
+	<vector>
+	<list>
+	<iostream>
+	<algorithm>
+	<tclap/CmdLineInterface.h>
+	<tclap/CmdLineOutput.h>
+	<tclap/XorHandler.h>
+	<tclap/Arg.h>
+
+1293997847 c:\users\szuperhab\desktop\prog\tclap\tclap-1.2.1\include\tclap\valuesconstraint.h
+	<string>
+	<vector>
+	<tclap/Constraint.h>
+	<config.h>
+	<sstream>
+	<strstream>
 
