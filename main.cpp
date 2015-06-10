@@ -8,10 +8,10 @@
 #include <tclap/CmdLine.h>
 
 //parameters that some users may want to tweak
-uint_fast16_t recompTresh=128;//streams are only recompressed if the best match differs from the original in <= recompTresh bytes
-int sizediffTresh=128;//streams are only compared when the size difference is <= sizediffTresh
-uint_fast16_t shortcutLength=512;//stop compression and count mismatches after this many bytes, if we get more than recompTresh then bail early
-uint_fast16_t mismatchTol=2;//if there are at most this many mismatches consider the stream a full match and stop looking for better parameters
+uint_fast16_t recompTresh;//streams are only recompressed if the best match differs from the original in <= recompTresh bytes
+uint_fast16_t sizediffTresh;//streams are only compared when the size difference is <= sizediffTresh
+uint_fast16_t shortcutLength;//stop compression and count mismatches after this many bytes, if we get more than recompTresh then bail early
+uint_fast16_t mismatchTol;//if there are at most this many mismatches consider the stream a full match and stop looking for better parameters
 bool bruteforceWindow=false;//bruteforce the zlib parameters, otherwise only try probable parameters based on the 2-byte header
 
 //debug parameters, not useful for most users
@@ -95,7 +95,7 @@ void parseCLI(int argc, char* argv[]){
 	// because exceptions will be thrown for problems.
 	try{
         // Define the command line object.
-        TCLAP::CmdLine cmd("Visit https://github.com/Diazonium/AntiZ for source code and support.", ' ', "0.1.2-git");
+        TCLAP::CmdLine cmd("Visit https://github.com/Diazonium/AntiZ for source code and support.", ' ', "0.1.2-alpha");
 
         // Define a value argument and add it to the command line. This defines the input file.
         TCLAP::ValueArg<std::string> infileArg("i", "input", "Input file name", true, "", "string");
@@ -105,14 +105,31 @@ void parseCLI(int argc, char* argv[]){
         TCLAP::ValueArg<std::string> outfileArg("o", "output", "Output file name", false, "", "string");
         cmd.add(outfileArg);
 
+        TCLAP::ValueArg<uint_fast16_t> recomptreshArg("", "recomp-tresh", "Recompression treshold in bytes. Streams are only recompressed if the best match differs from the original in at most recompTresh bytes. Increasing this treshold may allow more streams to be recompressed, but may increase ATZ file overhead and make it harder to compress. Default: 128  Maximum: 65535", false, 128, "integer");
+        cmd.add(recomptreshArg);
+        TCLAP::ValueArg<uint_fast16_t> sizedifftreshArg("", "sizediff-tresh", "Size difference treshold in bytes. If the size difference between a recompressed stream and the original is more than the treshold then do not even compare them. Increasing this treshold increases the chance that a stream will be compared to the original. The cost of comparing is relatively low, so setting this equal to the recompression treshold should be fine. Default: 128  Maximum: 65535", false, 128, "integer");
+        cmd.add(sizedifftreshArg);
+        TCLAP::ValueArg<uint_fast16_t> shortcutlenArg("", "shortcut-len", "Length of the shortcut in bytes. If a stream is longer than the shortcut, then stop compression after <shortcut> compressed bytes have been obtained and compare this portion to the original. If this comparison yields more than recompTresh mismatches, then do not compress the entire stream. Lowering this improves speed, but it must be significantly greater than recompTresh or the speed benefit will decrease. Default: 512  Maximum: 65535", false, 512, "integer");
+        cmd.add(shortcutlenArg);
+        TCLAP::ValueArg<uint_fast16_t> mismatchtolArg("", "mismatch-tol", "Mismatch tolerance in bytes. If a set of parameters are found that give at most this many mismatches, then accept them and stop looking for a better set of parameters. Increasing this improves speed at the cost of more ATZ file overhead that may hurt compression. Default: 2  Maximum: 65535", false, 2, "integer");
+        cmd.add(mismatchtolArg);
+
         // Define a switch and add it to the command line.
         TCLAP::SwitchArg reconSwitch("r", "reconstruct", "Assume the input file is an ATZ file and attempt to reconstruct the original file from it", false);
         cmd.add(reconSwitch);
+        TCLAP::SwitchArg brutewindowSwitch("", "brute-window", "Bruteforce deflate window size if there is a chance that recompression could be improved by it. This can have a major performance penalty. Default: disabled", false);
+        cmd.add(brutewindowSwitch);
 
         // Parse the args.
         cmd.parse( argc, argv );
 
         std::cout<<"Input file: "<<infileArg.getValue()<<std::endl;
+        //use the parameters we get
+        recompTresh= recomptreshArg.getValue();
+        sizediffTresh= sizedifftreshArg.getValue();
+        shortcutLength= shortcutlenArg.getValue();
+        mismatchTol= mismatchtolArg.getValue();
+        bruteforceWindow= brutewindowSwitch.getValue();
 
         recon = reconSwitch.getValue();//check if we need to reconstruct only
         if (recon){
@@ -266,7 +283,9 @@ void findDeflateParams(unsigned char rBuffer[], std::vector<streamOffset>& strea
                 }
                 //if bruteforcing is turned on and needed, try all remaining combinations
                 if (((streamOffsetList[j].streamLength-streamOffsetList[j].identBytes)>=mismatchTol)&&(bruteforceWindow)){//if bruteforcing is turned on try all remaining combinations
+                    #ifdef debug
                     std::cout<<"bruteforcing strm #"<<j<<std::endl;
+                    #endif // debug
                     if (window==10){
                         testParamRange(rBuffer, decompBuffer, streamOffsetList, j, 1, 9, 11, 15, 1, 9);
                     }else{
@@ -668,7 +687,7 @@ int main(int argc, char* argv[]) {
     int_fast64_t numFullmatch=0;
     #endif // debug
     uint64_t recomp=0;
-
+    cout<<"AntiZ 0.1.2-alpha"<<endl;
 
 	//PHASE 0
 	//parse CLI arguments, open input file and read it into memory
@@ -753,9 +772,9 @@ int main(int argc, char* argv[]) {
         }
     }
     cout<<"recompressed:"<<recomp<<"/"<<streamOffsetList.size()<<endl;
-    if ((recomp<streamOffsetList.size())&&(!bruteforceWindow)){
+    /*if ((recomp<streamOffsetList.size())&&(!bruteforceWindow)){
         std::cout<<"Some streams could not be recompressed. Bruteforcing window size may or may not help."<<std::endl;
-    }
+    }*/
 
     #ifdef debug
     pauser();
