@@ -22,7 +22,8 @@ int_fast64_t concentrate=-1;//only try to recompress the stream# givel here, neg
 std::string infile_name;
 std::string reconfile_name;
 std::string atzfile_name;
-bool recon=false;
+bool recon;
+bool notest;
 
 class fileOffset{
 public:
@@ -95,7 +96,7 @@ void parseCLI(int argc, char* argv[]){
 	// because exceptions will be thrown for problems.
 	try{
         // Define the command line object.
-        TCLAP::CmdLine cmd("Visit https://github.com/Diazonium/AntiZ for source code and support.", ' ', "0.1.2-alpha");
+        TCLAP::CmdLine cmd("Visit https://github.com/Diazonium/AntiZ for source code and support.", ' ', "0.1.3-git");
 
         // Define a value argument and add it to the command line. This defines the input file.
         TCLAP::ValueArg<std::string> infileArg("i", "input", "Input file name", true, "", "string");
@@ -117,6 +118,8 @@ void parseCLI(int argc, char* argv[]){
         // Define a switch and add it to the command line.
         TCLAP::SwitchArg reconSwitch("r", "reconstruct", "Assume the input file is an ATZ file and attempt to reconstruct the original file from it", false);
         cmd.add(reconSwitch);
+        TCLAP::SwitchArg notestSwitch("", "notest", "Skip comparing the reconstructed file to the original at the end. This is not recommended, as AntiZ is still experimental software and my contain bugs that corrupt data.", false);
+        cmd.add(notestSwitch);
         TCLAP::SwitchArg brutewindowSwitch("", "brute-window", "Bruteforce deflate window size if there is a chance that recompression could be improved by it. This can have a major performance penalty. Default: disabled", false);
         cmd.add(brutewindowSwitch);
 
@@ -132,6 +135,7 @@ void parseCLI(int argc, char* argv[]){
         bruteforceWindow= brutewindowSwitch.getValue();
 
         recon = reconSwitch.getValue();//check if we need to reconstruct only
+        notest= notestSwitch.getValue();
         if (recon){
             std::cout<<"assuming input file is an ATZ file, attempting to reconstruct"<<std::endl;
             atzfile_name= infileArg.getValue();
@@ -687,7 +691,7 @@ int main(int argc, char* argv[]) {
     int_fast64_t numFullmatch=0;
     #endif // debug
     uint64_t recomp=0;
-    cout<<"AntiZ 0.1.2-alpha"<<endl;
+    cout<<"AntiZ 0.1.3-git"<<endl;
 
 	//PHASE 0
 	//parse CLI arguments, open input file and read it into memory
@@ -699,7 +703,7 @@ int main(int argc, char* argv[]) {
     //parse CLI arguments and if needed jump to reconstruction
 	parseCLI(argc, argv);
     if (recon) goto PHASE5;
-
+    //open the input file and read it in
 	infile.open(infile_name, std::ios::in | std::ios::binary);
 	if (!infile.is_open()) {
        cout << "error: open file for input failed!" << endl;
@@ -1179,5 +1183,56 @@ int main(int argc, char* argv[]) {
     pauser();
     #endif // debug
     delete [] atzBuffer;
+
+    //PHASE 6: verify that the reconstructed file is identical to the original
+    if((!recon)&&(!notest)){//if we are just reconstructing we dont have the original file
+        cout<<"Testing...";
+        //open the original file and read it in
+        infile.open(infile_name, std::ios::in | std::ios::binary);
+        if (!infile.is_open()) {
+            cout << "error: open file for input failed!" << endl;
+            abort();
+        }
+        //getting the size of the file
+        infile.seekg (0, infile.end);
+        infileSize=infile.tellg();
+        infile.seekg (0, infile.beg);
+        #ifdef debug
+        cout<<endl<<"Original file size:"<<infileSize<<endl;
+        #endif // debug
+        //setting up read buffer and reading the entire file into the buffer
+        rBuffer = new unsigned char[infileSize];
+        infile.read(reinterpret_cast<char*>(rBuffer), infileSize);
+        infile.close();
+        std::ifstream recfile;
+        //open the reconstructed file and read it in
+        recfile.open(reconfile_name, std::ios::in | std::ios::binary);
+        if (!recfile.is_open()) {
+            cout << "error: open file for input failed!" << endl;
+            abort();
+        }
+        //getting the size of the file
+        recfile.seekg (0, recfile.end);
+        uint64_t recfileSize=recfile.tellg();
+        recfile.seekg (0, recfile.beg);
+        #ifdef debug
+        cout<<endl<<"Reconstructed file size:"<<recfileSize<<endl;
+        #endif // debug
+        //setting up read buffer and reading the entire file into the buffer
+        unsigned char* recBuffer = new unsigned char[recfileSize];
+        recfile.read(reinterpret_cast<char*>(recBuffer), recfileSize);
+        recfile.close();
+        if(infileSize!=recfileSize){
+            cout<<"error: size mismatch";
+            abort();
+        }
+        for (i=0; i<infileSize; i++){
+            if (rBuffer[i]!=recBuffer[i]){
+                cout<<"error: byte mismatch "<<i;
+                abort();
+            }
+        }
+        cout<<"OK!";
+    }
 	return 0;
 }
