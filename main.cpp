@@ -30,11 +30,11 @@ public:
     fileOffset(){
         abort();//the default constructor should not be used in this version
     }
-    fileOffset(int_fast64_t os, int ot){
+    fileOffset(uint64_t os, int ot){
         offset=os;
         offsetType=ot;
     }
-    uint_fast64_t offset;
+    uint64_t offset;
     int offsetType;
 };
 
@@ -688,7 +688,7 @@ int main(int argc, char* argv[]) {
     uint64_t atzlen=0;//placeholder for the length of the atz file
     int ret=-9;
     #ifdef debug
-    int_fast64_t numFullmatch=0;
+    uint_fast64_t numFullmatch=0;
     #endif // debug
     uint64_t recomp=0;
     cout<<"AntiZ 0.1.3-git"<<endl;
