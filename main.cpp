@@ -2,6 +2,7 @@
 #include <fstream>
 #include <vector>
 #include <cmath>
+#include <cstdio>
 #include <string>
 #include <iomanip>
 #include <zlib.h>
@@ -71,10 +72,10 @@ public:
     uint8_t memlvl;
     uint64_t identBytes;
     int_fast64_t firstDiffByte;//the offset of the first byte that does not match, relative to stream start, not file start
-    std::vector<int_fast64_t> diffByteOffsets;//offsets of bytes that differ, this is an incremental offset list to enhance recompression, kinda like a PNG filter
+    std::vector<uint64_t> diffByteOffsets;//offsets of bytes that differ, this is an incremental offset list to enhance recompression, kinda like a PNG filter
     //this improves compression if the mismatching bytes are consecutive, eg. 451,452,453,...(no repetitions, hard to compress)
     //  transforms into 0, 1, 1, 1,...(repetitive, easy to compress)
-    std::vector<unsigned char> diffByteVal;
+    std::vector<uint8_t> diffByteVal;
     bool recomp;
     unsigned char* atzInfos;
 };
@@ -96,7 +97,7 @@ void parseCLI(int argc, char* argv[]){
 	// because exceptions will be thrown for problems.
 	try{
         // Define the command line object.
-        TCLAP::CmdLine cmd("Visit https://github.com/Diazonium/AntiZ for source code and support.", ' ', "0.1.3-git");
+        TCLAP::CmdLine cmd("Visit https://github.com/Diazonium/AntiZ for source code and support.", ' ', "0.1.3-alpha");
 
         // Define a value argument and add it to the command line. This defines the input file.
         TCLAP::ValueArg<std::string> infileArg("i", "input", "Input file name", true, "", "string");
@@ -691,7 +692,7 @@ int main(int argc, char* argv[]) {
     uint_fast64_t numFullmatch=0;
     #endif // debug
     uint64_t recomp=0;
-    cout<<"AntiZ 0.1.3-git"<<endl;
+    cout<<"AntiZ 0.1.3-alpha"<<endl;
 
 	//PHASE 0
 	//parse CLI arguments, open input file and read it into memory
@@ -776,16 +777,14 @@ int main(int argc, char* argv[]) {
         }
     }
     cout<<"recompressed:"<<recomp<<"/"<<streamOffsetList.size()<<endl;
-    /*if ((recomp<streamOffsetList.size())&&(!bruteforceWindow)){
-        std::cout<<"Some streams could not be recompressed. Bruteforcing window size may or may not help."<<std::endl;
-    }*/
 
     #ifdef debug
     pauser();
     #endif // debug
 
     //PHASE 4
-    //take the information created in phase 3 and use it to create an ATZ file(see ATZ file format spec.)
+    //take the information created in phase 3 and use it to create an ATZ file
+    //currently ATZ1 is in use, no specifications yet, and will be deprecated when ATZ2 comes
     outfile.open(atzfile_name, std::ios::out | std::ios::binary | std::ios::trunc);
 	if (!outfile.is_open()) {
        cout << "error: open file for output failed!" << endl;
@@ -931,6 +930,7 @@ int main(int argc, char* argv[]) {
 
     PHASE5:
     //PHASE 5: verify that we can reconstruct the original file, using only data from the ATZ file
+    if (!notest){//dont reconstruct if we wont test it
     infileSize=0;
     atzlen=0;
     lastos=28;
@@ -1183,6 +1183,7 @@ int main(int argc, char* argv[]) {
     pauser();
     #endif // debug
     delete [] atzBuffer;
+    }
 
     //PHASE 6: verify that the reconstructed file is identical to the original
     if((!recon)&&(!notest)){//if we are just reconstructing we dont have the original file
@@ -1232,7 +1233,14 @@ int main(int argc, char* argv[]) {
                 abort();
             }
         }
-        cout<<"OK!";
+        cout<<"OK!"<<endl;
+        #ifdef debug
+        pauser();
+        #endif // debug
+        if (remove(reconfile_name.c_str())!=0){//delete the reconstructed file since it was only needed for testing
+            cout<<"error: cannot delete recfile";
+            abort();
+        }
     }
 	return 0;
 }
