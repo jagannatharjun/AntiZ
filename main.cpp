@@ -97,7 +97,7 @@ void parseCLI(int argc, char* argv[]){
 	// because exceptions will be thrown for problems.
 	try{
         // Define the command line object.
-        TCLAP::CmdLine cmd("Visit https://github.com/Diazonium/AntiZ for source code and support.", ' ', "0.1.3-alpha");
+        TCLAP::CmdLine cmd("Visit https://github.com/Diazonium/AntiZ for source code and support.", ' ', "0.1.4-git");
 
         // Define a value argument and add it to the command line. This defines the input file.
         TCLAP::ValueArg<std::string> infileArg("i", "input", "Input file name", true, "", "string");
@@ -184,7 +184,6 @@ inline bool testParamRange(unsigned char origbuff[], unsigned char decompbuff[],
                     #endif // debug
                     return true;
                 }
-
             }
         }
     }
@@ -560,7 +559,7 @@ int parseOffsetType(int header){
     }
 }
 
-void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint_fast64_t buffLen){
+void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint64_t buffLen){
     //this function searches a buffer for zlib headers, count them and fill a vector of fileOffsets
 
     //try to guess the number of potential zlib headers in the file from the file size
@@ -642,7 +641,7 @@ bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, 
 void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets){
     //this function takes a vector of fileOffsets, a buffer of bufflen length and tests if the offsets in the fileOffset vector
     //are marking the beginning of a valid zlib stream
-    //the offsets, types, lengths and inflated lengths of valid zlib streams are pused to a vector of streamOffsets
+    //the offsets, types, lengths and inflated lengths of valid zlib streams are pushed to a vector of streamOffsets
 	uint64_t numOffsets=fileoffsets.size();
 	uint64_t lastGoodOffset=0;
 	uint64_t lastStreamLength=0;
@@ -692,7 +691,7 @@ int main(int argc, char* argv[]) {
     uint_fast64_t numFullmatch=0;
     #endif // debug
     uint64_t recomp=0;
-    cout<<"AntiZ 0.1.3-alpha"<<endl;
+    cout<<"AntiZ 0.1.4-git"<<endl;
 
 	//PHASE 0
 	//parse CLI arguments, open input file and read it into memory
@@ -704,12 +703,12 @@ int main(int argc, char* argv[]) {
     //parse CLI arguments and if needed jump to reconstruction
 	parseCLI(argc, argv);
     if (recon) goto PHASE5;
-    //open the input file and read it in
+    //open the input file and check for error
 	infile.open(infile_name, std::ios::in | std::ios::binary);
 	if (!infile.is_open()) {
        cout << "error: open file for input failed!" << endl;
        pauser();
- 	   abort();
+ 	   return -1;
 	}
 	//getting the size of the file
 	infile.seekg (0, infile.end);
