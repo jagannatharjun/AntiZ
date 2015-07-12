@@ -82,7 +82,7 @@ public:
 
 inline void pauser();
 void parseCLI(int argc, char* argv[]);
-void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint_fast64_t buffLen);
+void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint64_t buffLen, uint64_t chunkOffset);
 bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, uint64_t& total_out);
 void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets);
 int parseOffsetType(int header);
@@ -559,8 +559,9 @@ int parseOffsetType(int header){
     }
 }
 
-void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint64_t buffLen){
+void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint64_t buffLen, uint64_t chunkOffset=0){
     //this function searches a buffer for zlib headers, count them and fill a vector of fileOffsets
+    //chunkOffset is used if the input buffer is just a chunk of a bigger set of data (eg. a file that does not fit into RAM)
 
     //try to guess the number of potential zlib headers in the file from the file size
 	//this value is purely empirical, may need tweaking
@@ -582,9 +583,9 @@ void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint
         if (offsetType >= 0){
             #ifdef debug
             std::cout << "Zlib header 0x" << std::hex << std::setfill('0') << std::setw(4) << header << std::dec
-                      << " with " << (1 << ((header >> 12) - 2)) << "K window at offset: " << i << std::endl;
+                      << " with " << (1 << ((header >> 12) - 2)) << "K window at offset: " << (i+chunkOffset) << std::endl;
             #endif // debug
-            offsets.push_back(fileOffset(i, offsetType));
+            offsets.push_back(fileOffset(i+chunkOffset, offsetType));
             }
         }
     #ifdef debug
@@ -669,17 +670,12 @@ void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOf
 }
 
 int main(int argc, char* argv[]) {
-	using std::cout;
-	using std::endl;
-	using std::cin;
-	using std::vector;
-
 	uint_fast64_t i,j;
 	std::ifstream infile;
 	std::ofstream outfile;
 	uint64_t infileSize;
-	vector<fileOffset> offsetList;//offsetList stores memory offsets where potential headers can be found, and the type of the offset
-	vector<streamOffset> streamOffsetList;//streamOffsetList stores offsets of confirmed zlib streams and a bunch of data on them
+	std::vector<fileOffset> offsetList;//offsetList stores memory offsets where potential headers can be found, and the type of the offset
+	std::vector<streamOffset> streamOffsetList;//streamOffsetList stores offsets of confirmed zlib streams and a bunch of data on them
 	z_stream strm;
 	unsigned char* rBuffer;
 
@@ -691,7 +687,7 @@ int main(int argc, char* argv[]) {
     uint_fast64_t numFullmatch=0;
     #endif // debug
     uint64_t recomp=0;
-    cout<<"AntiZ 0.1.4-git"<<endl;
+    std::cout<<"AntiZ 0.1.4-git"<<std::endl;
 
 	//PHASE 0
 	//parse CLI arguments, open input file and read it into memory
@@ -706,7 +702,7 @@ int main(int argc, char* argv[]) {
     //open the input file and check for error
 	infile.open(infile_name, std::ios::in | std::ios::binary);
 	if (!infile.is_open()) {
-       cout << "error: open file for input failed!" << endl;
+       std::cout<< "error: open file for input failed!" <<std::endl;
        pauser();
  	   return -1;
 	}
@@ -714,7 +710,7 @@ int main(int argc, char* argv[]) {
 	infile.seekg (0, infile.end);
 	infileSize=infile.tellg();
 	infile.seekg (0, infile.beg);
-	cout<<"Input size:"<<infileSize<<endl;
+	std::cout<<"Input size:"<<infileSize<<std::endl;
     //setting up read buffer and reading the entire file into the buffer
     rBuffer = new unsigned char[infileSize];
     infile.read(reinterpret_cast<char*>(rBuffer), infileSize);
@@ -724,14 +720,14 @@ int main(int argc, char* argv[]) {
 	//search the file for zlib headers, count them and create an offset list
 	searchBuffer(rBuffer, offsetList, infileSize);
     #ifdef debug
-    cout<<"Found "<<offsetList.size()<<" zlib headers"<<endl;
+    std::cout<<"Found "<<offsetList.size()<<" zlib headers"<<std::endl;
     #endif // debug
 
     //PHASE 2
     //start trying to decompress at the collected offsets
     //test all offsets found in phase 1
     testOffsetList(rBuffer, infileSize, offsetList, streamOffsetList);
-    cout<<"Good offsets: "<<streamOffsetList.size()<<endl;
+    std::cout<<"Good offsets: "<<streamOffsetList.size()<<std::endl;
     offsetList.clear();//we only need the good offsets
     offsetList.shrink_to_fit();
     #ifdef debug
@@ -742,31 +738,31 @@ int main(int argc, char* argv[]) {
     //start trying to find the parameters to use for recompression
 
     findDeflateParams(rBuffer, streamOffsetList);
-    cout<<endl;
+    std::cout<<std::endl;
 
     #ifdef debug
     for (j=0; j<streamOffsetList.size(); j++){
         if (((streamOffsetList[j].streamLength-streamOffsetList[j].identBytes)<=mismatchTol)&&(streamOffsetList[j].identBytes>0)) numFullmatch++;
     }
-    cout<<"fullmatch streams:"<<numFullmatch<<" out of "<<streamOffsetList.size()<<endl;
-    cout<<endl;
+    std::cout<<"fullmatch streams:"<<numFullmatch<<" out of "<<streamOffsetList.size()<<std::endl;
+    std::cout<<std::endl;
     pauser();
-    cout<<"Stream info"<<endl;
+    std::cout<<"Stream info"<<std::endl;
     for (j=0; j<streamOffsetList.size(); j++){
-        cout<<"-------------------------"<<endl;
-        cout<<"   stream #"<<j<<endl;
-        cout<<"   offset:"<<streamOffsetList[j].offset<<endl;
-        cout<<"   memlevel:"<<+streamOffsetList[j].memlvl<<endl;
-        cout<<"   clevel:"<<+streamOffsetList[j].clevel<<endl;
-        cout<<"   window:"<<+streamOffsetList[j].window<<endl;
-        cout<<"   best match:"<<streamOffsetList[j].identBytes<<" out of "<<streamOffsetList[j].streamLength<<endl;
-        cout<<"   diffBytes:"<<streamOffsetList[j].diffByteOffsets.size()<<endl;
-        cout<<"   diffVals:"<<streamOffsetList[j].diffByteVal.size()<<endl;
-        cout<<"   mismatched bytes:";
+        std::cout<<"-------------------------"<<std::endl;
+        std::cout<<"   stream #"<<j<<std::endl;
+        std::cout<<"   offset:"<<streamOffsetList[j].offset<<std::endl;
+        std::cout<<"   memlevel:"<<+streamOffsetList[j].memlvl<<std::endl;
+        std::cout<<"   clevel:"<<+streamOffsetList[j].clevel<<std::endl;
+        std::cout<<"   window:"<<+streamOffsetList[j].window<<std::endl;
+        std::cout<<"   best match:"<<streamOffsetList[j].identBytes<<" out of "<<streamOffsetList[j].streamLength<<std::endl;
+        std::cout<<"   diffBytes:"<<streamOffsetList[j].diffByteOffsets.size()<<std::endl;
+        std::cout<<"   diffVals:"<<streamOffsetList[j].diffByteVal.size()<<std::endl;
+        std::cout<<"   mismatched bytes:";
         for (i=0; i<streamOffsetList[j].diffByteOffsets.size(); i++){
-            cout<<streamOffsetList[j].diffByteOffsets[i]<<";";
+            std::cout<<streamOffsetList[j].diffByteOffsets[i]<<";";
         }
-        cout<<endl;
+        std::cout<<std::endl;
     }
     #endif // debug
 
@@ -775,7 +771,7 @@ int main(int argc, char* argv[]) {
             recomp++;
         }
     }
-    cout<<"recompressed:"<<recomp<<"/"<<streamOffsetList.size()<<endl;
+    std::cout<<"recompressed:"<<recomp<<"/"<<streamOffsetList.size()<<std::endl;
 
     #ifdef debug
     pauser();
@@ -786,7 +782,7 @@ int main(int argc, char* argv[]) {
     //currently ATZ1 is in use, no specifications yet, and will be deprecated when ATZ2 comes
     outfile.open(atzfile_name, std::ios::out | std::ios::binary | std::ios::trunc);
 	if (!outfile.is_open()) {
-       cout << "error: open file for output failed!" << endl;
+       std::cout << "error: open file for output failed!" << std::endl;
        pauser();
  	   abort();
 	}
@@ -807,7 +803,7 @@ int main(int argc, char* argv[]) {
     for(j=0;j<streamOffsetList.size();j++){//write recompressed stream descriptions
         if (streamOffsetList[j].recomp==true){//we are operating on the j-th stream
             #ifdef debug
-            cout<<"recompressing stream #"<<j<<endl;
+            std::cout<<"recompressing stream #"<<j<<std::endl;
             #endif // debug
             outfile.write(reinterpret_cast<char*>(&streamOffsetList[j].offset), 8);
             outfile.write(reinterpret_cast<char*>(&streamOffsetList[j].streamLength), 8);
@@ -845,7 +841,7 @@ int main(int argc, char* argv[]) {
             ret=inflateInit(&strm);
             if (ret != Z_OK)
             {
-                cout<<"inflateInit() failed with exit code:"<<ret<<endl;
+                std::cout<<"inflateInit() failed with exit code:"<<ret<<std::endl;
                 pauser();
                 abort();
             }
@@ -863,7 +859,7 @@ int main(int argc, char* argv[]) {
                 }
                 default://shit hit the fan, should never happen normally
                 {
-                    cout<<"inflate() failed with exit code:"<<ret<<endl;
+                    std::cout<<"inflate() failed with exit code:"<<ret<<std::endl;
                     pauser();
                     abort();
                 }
@@ -872,7 +868,7 @@ int main(int argc, char* argv[]) {
             ret=inflateEnd(&strm);
             if (ret!=Z_OK)
             {
-                cout<<"inflateEnd() failed with exit code:"<<ret<<endl;//should never happen normally
+                std::cout<<"inflateEnd() failed with exit code:"<<ret<<std::endl;//should never happen normally
                 pauser();
                 return ret;
             }
@@ -885,22 +881,22 @@ int main(int argc, char* argv[]) {
     for(j=0;j<streamOffsetList.size();j++){//write the gaps before streams and non-recompressed streams to disk as the residue
         if ((lastos+lastlen)==streamOffsetList[j].offset){
             #ifdef debug
-            cout<<"no gap before stream #"<<j<<endl;
+            std::cout<<"no gap before stream #"<<j<<std::endl;
             #endif // debug
             if (streamOffsetList[j].recomp==false){
                 #ifdef debug
-                cout<<"copying stream #"<<j<<endl;
+                std::cout<<"copying stream #"<<j<<std::endl;
                 #endif // debug
                 outfile.write(reinterpret_cast<char*>(rBuffer+streamOffsetList[j].offset), streamOffsetList[j].streamLength);
             }
         }else{
             #ifdef debug
-            cout<<"gap of "<<(streamOffsetList[j].offset-(lastos+lastlen))<<" bytes before stream #"<<j<<endl;
+            std::cout<<"gap of "<<(streamOffsetList[j].offset-(lastos+lastlen))<<" bytes before stream #"<<j<<std::endl;
             #endif // debug
             outfile.write(reinterpret_cast<char*>(rBuffer+lastos+lastlen), (streamOffsetList[j].offset-(lastos+lastlen)));
             if (streamOffsetList[j].recomp==false){
                 #ifdef debug
-                cout<<"copying stream #"<<j<<endl;
+                std::cout<<"copying stream #"<<j<<std::endl;
                 #endif // debug
                 outfile.write(reinterpret_cast<char*>(rBuffer+streamOffsetList[j].offset), streamOffsetList[j].streamLength);
             }
@@ -910,13 +906,13 @@ int main(int argc, char* argv[]) {
     }
     if((lastos+lastlen)<infileSize){//if there is stuff after the last stream, write that to disk too
         #ifdef debug
-        cout<<(infileSize-(lastos+lastlen))<<" bytes copied from the end of the file"<<endl;
+        std::cout<<(infileSize-(lastos+lastlen))<<" bytes copied from the end of the file"<<std::endl;
         #endif // debug
         outfile.write(reinterpret_cast<char*>(rBuffer+lastos+lastlen), (infileSize-(lastos+lastlen)));
     }
 
     atzlen=outfile.tellp();
-    cout<<"Total bytes written: "<<atzlen<<endl;
+    std::cout<<"Total bytes written: "<<atzlen<<std::endl;
     outfile.seekp(4);//go back to the placeholder
     outfile.write(reinterpret_cast<char*>(&atzlen), 8);
     #ifdef debug
@@ -938,58 +934,58 @@ int main(int argc, char* argv[]) {
 
     std::ifstream atzfile(atzfile_name, std::ios::in | std::ios::binary);
 	if (!atzfile.is_open()) {
-       cout << "error: open ATZ file for input failed!" << endl;
+       std::cout << "error: open ATZ file for input failed!" << std::endl;
        pauser();
  	   abort();
 	}
-	cout<<"reconstructing from "<<atzfile_name<<endl;
+	std::cout<<"reconstructing from "<<atzfile_name<<std::endl;
     atzfile.seekg (0, atzfile.end);
 	infileSize=atzfile.tellg();
 	atzfile.seekg (0, atzfile.beg);
-	cout<<"Input size:"<<infileSize<<endl;
+	std::cout<<"Input size:"<<infileSize<<std::endl;
     //setting up read buffer and reading the entire file into the buffer
     unsigned char* atzBuffer = new unsigned char[infileSize];
     atzfile.read(reinterpret_cast<char*>(atzBuffer), infileSize);
     atzfile.close();
 
     if ((atzBuffer[0]!=65)||(atzBuffer[1]!=84)||(atzBuffer[2]!=90)||(atzBuffer[3]!=1)){
-        cout<<"ATZ1 header not found"<<endl;
+        std::cout<<"ATZ1 header not found"<<std::endl;
         pauser();
         abort();
     }
     atzlen=*reinterpret_cast<uint64_t*>(&atzBuffer[4]);
     if (atzlen!=infileSize){
-        cout<<"atzlen mismatch"<<endl;
+        std::cout<<"atzlen mismatch"<<std::endl;
         pauser();
         abort();
     }
     origlen=*reinterpret_cast<uint64_t*>(&atzBuffer[12]);
     nstrms=*reinterpret_cast<uint64_t*>(&atzBuffer[20]);
     #ifdef debug
-    cout<<"nstrms:"<<nstrms<<endl;
+    std::cout<<"nstrms:"<<nstrms<<std::endl;
     #endif // debug
     if (nstrms>0){
         streamOffsetList.reserve(nstrms);
         //reead in all the info about the streams
         for (j=0;j<nstrms;j++){
             #ifdef debug
-            cout<<"stream #"<<j<<endl;
+            std::cout<<"stream #"<<j<<std::endl;
             #endif // debug
             streamOffsetList.push_back(streamOffset(*reinterpret_cast<uint64_t*>(&atzBuffer[lastos]), -1, *reinterpret_cast<uint64_t*>(&atzBuffer[8+lastos]), *reinterpret_cast<uint64_t*>(&atzBuffer[16+lastos])));
             streamOffsetList[j].clevel=atzBuffer[24+lastos];
             streamOffsetList[j].window=atzBuffer[25+lastos];
             streamOffsetList[j].memlvl=atzBuffer[26+lastos];
             #ifdef debug
-            cout<<"   offset:"<<streamOffsetList[j].offset<<endl;
-            cout<<"   memlevel:"<<+streamOffsetList[j].memlvl<<endl;
-            cout<<"   clevel:"<<+streamOffsetList[j].clevel<<endl;
-            cout<<"   window:"<<+streamOffsetList[j].window<<endl;
+            std::cout<<"   offset:"<<streamOffsetList[j].offset<<std::endl;
+            std::cout<<"   memlevel:"<<+streamOffsetList[j].memlvl<<std::endl;
+            std::cout<<"   clevel:"<<+streamOffsetList[j].clevel<<std::endl;
+            std::cout<<"   window:"<<+streamOffsetList[j].window<<std::endl;
             #endif // debug
             //partial match handling
             uint64_t diffbytes=*reinterpret_cast<uint64_t*>(&atzBuffer[27+lastos]);
             if (diffbytes>0){//if the stream is just a partial match
                 #ifdef debug
-                cout<<"   partial match"<<endl;
+                std::cout<<"   partial match"<<std::endl;
                 #endif // debug
                 streamOffsetList[j].firstDiffByte=*reinterpret_cast<uint64_t*>(&atzBuffer[35+lastos]);
                 streamOffsetList[j].diffByteOffsets.reserve(diffbytes);
@@ -1002,7 +998,7 @@ int main(int argc, char* argv[]) {
                 lastos=lastos+43+diffbytes*9+streamOffsetList[j].inflatedLength;
             } else{//if the stream is a full match
                 #ifdef debug
-                cout<<"   full match"<<endl;
+                std::cout<<"   full match"<<std::endl;
                 #endif // debug
                 streamOffsetList[j].firstDiffByte=-1;//negative value signals full match
                 streamOffsetList[j].atzInfos=&atzBuffer[35+lastos];
@@ -1010,7 +1006,7 @@ int main(int argc, char* argv[]) {
             }
         }
         #ifdef debug
-        cout<<"lastos:"<<lastos<<endl;
+        std::cout<<"lastos:"<<lastos<<std::endl;
         #endif // debug
         uint64_t residueos=lastos;
         uint64_t gapsum=0;
@@ -1026,15 +1022,15 @@ int main(int argc, char* argv[]) {
         for(j=0;j<streamOffsetList.size();j++){
             if ((lastos+lastlen)==streamOffsetList[j].offset){//no gap before the stream
                 #ifdef debug
-                cout<<"no gap before stream #"<<j<<endl;
-                cout<<"reconstructing stream #"<<j<<endl;
+                std::cout<<"no gap before stream #"<<j<<std::endl;
+                std::cout<<"reconstructing stream #"<<j<<std::endl;
                 #endif // debug
                 //a buffer needs to be created to hold the compressed data
                 unsigned char* compBuffer= new unsigned char[streamOffsetList[j].streamLength+32768];
                 {
                     //do compression
                     #ifdef debug
-                    cout<<"   compressing"<<endl;
+                    std::cout<<"   compressing"<<std::endl;
                     #endif // debug
                     strm.zalloc = Z_NULL;
                     strm.zfree = Z_NULL;
@@ -1045,7 +1041,7 @@ int main(int argc, char* argv[]) {
                     ret=deflateInit2(&strm, streamOffsetList[j].clevel, Z_DEFLATED, streamOffsetList[j].window, streamOffsetList[j].memlvl, Z_DEFAULT_STRATEGY);
                     if (ret != Z_OK)
                     {
-                        cout<<"deflateInit() failed with exit code:"<<ret<<endl;
+                        std::cout<<"deflateInit() failed with exit code:"<<ret<<std::endl;
                         pauser();
                         abort();
                     }
@@ -1061,7 +1057,7 @@ int main(int argc, char* argv[]) {
                         }
                         default://shit hit the fan, should never happen normally
                         {
-                            cout<<"deflate() failed with exit code:"<<ret<<endl;
+                            std::cout<<"deflate() failed with exit code:"<<ret<<std::endl;
                             pauser();
                             abort();
                         }
@@ -1070,7 +1066,7 @@ int main(int argc, char* argv[]) {
                     ret=deflateEnd(&strm);
                     if (ret!=Z_OK)
                     {
-                        cout<<"deflateEnd() failed with exit code:"<<ret<<endl;//should never happen normally
+                        std::cout<<"deflateEnd() failed with exit code:"<<ret<<std::endl;//should never happen normally
                         pauser();
                         return ret;
                     }
@@ -1078,7 +1074,7 @@ int main(int argc, char* argv[]) {
                 //do stream modification if needed
                 if (streamOffsetList[j].firstDiffByte>=0){
                     #ifdef debug
-                    cout<<"   modifying "<<streamOffsetList[j].diffByteOffsets.size()<<" bytes"<<endl;
+                    std::cout<<"   modifying "<<streamOffsetList[j].diffByteOffsets.size()<<" bytes"<<std::endl;
                     #endif // debug
                     uint64_t db=streamOffsetList[j].diffByteOffsets.size();
                     uint64_t sum=0;
@@ -1091,19 +1087,19 @@ int main(int argc, char* argv[]) {
                 delete [] compBuffer;
             }else{
                 #ifdef debug
-                cout<<"gap of "<<(streamOffsetList[j].offset-(lastos+lastlen))<<" bytes before stream #"<<j<<endl;
+                std::cout<<"gap of "<<(streamOffsetList[j].offset-(lastos+lastlen))<<" bytes before stream #"<<j<<std::endl;
                 #endif // debug
                 recfile.write(reinterpret_cast<char*>(atzBuffer+residueos+gapsum), (streamOffsetList[j].offset-(lastos+lastlen)));
                 gapsum=gapsum+(streamOffsetList[j].offset-(lastos+lastlen));
                 #ifdef debug
-                cout<<"reconstructing stream #"<<j<<endl;
+                std::cout<<"reconstructing stream #"<<j<<std::endl;
                 #endif // debug
                 //a buffer needs to be created to hold the compressed data
                 unsigned char* compBuffer= new unsigned char[streamOffsetList[j].streamLength+32768];
                 {
                     //do compression
                     #ifdef debug
-                    cout<<"   compressing"<<endl;
+                    std::cout<<"   compressing"<<std::endl;
                     #endif // debug
                     strm.zalloc = Z_NULL;
                     strm.zfree = Z_NULL;
@@ -1114,7 +1110,7 @@ int main(int argc, char* argv[]) {
                     ret=deflateInit2(&strm, streamOffsetList[j].clevel, Z_DEFLATED, streamOffsetList[j].window, streamOffsetList[j].memlvl, Z_DEFAULT_STRATEGY);
                     if (ret != Z_OK)
                     {
-                        cout<<"deflateInit() failed with exit code:"<<ret<<endl;
+                        std::cout<<"deflateInit() failed with exit code:"<<ret<<std::endl;
                         pauser();
                         abort();
                     }
@@ -1130,7 +1126,7 @@ int main(int argc, char* argv[]) {
                         }
                         default://shit hit the fan, should never happen normally
                         {
-                            cout<<"deflate() failed with exit code:"<<ret<<endl;
+                            std::cout<<"deflate() failed with exit code:"<<ret<<std::endl;
                             pauser();
                             abort();
                         }
@@ -1139,7 +1135,7 @@ int main(int argc, char* argv[]) {
                     ret=deflateEnd(&strm);
                     if (ret!=Z_OK)
                     {
-                        cout<<"deflateEnd() failed with exit code:"<<ret<<endl;//should never happen normally
+                        std::cout<<"deflateEnd() failed with exit code:"<<ret<<std::endl;//should never happen normally
                         pauser();
                         return ret;
                     }
@@ -1147,7 +1143,7 @@ int main(int argc, char* argv[]) {
                 //do stream modification if needed
                 if (streamOffsetList[j].firstDiffByte>=0){
                     #ifdef debug
-                    cout<<"   modifying "<<streamOffsetList[j].diffByteOffsets.size()<<" bytes"<<endl;
+                    std::cout<<"   modifying "<<streamOffsetList[j].diffByteOffsets.size()<<" bytes"<<std::endl;
                     #endif // debug
                     uint64_t db=streamOffsetList[j].diffByteOffsets.size();
                     uint64_t sum=0;
@@ -1164,14 +1160,14 @@ int main(int argc, char* argv[]) {
         }
         if ((lastos+lastlen)<origlen){
             #ifdef debug
-            cout<<"copying "<<(origlen-(lastos+lastlen))<<" bytes to the end of the file"<<endl;
+            std::cout<<"copying "<<(origlen-(lastos+lastlen))<<" bytes to the end of the file"<<std::endl;
             #endif // debug
             recfile.write(reinterpret_cast<char*>(atzBuffer+residueos+gapsum), (origlen-(lastos+lastlen)));
         }
         recfile.close();
     }else{//if there are no recompressed streams
         #ifdef debug
-        cout<<"no recompressed streams in the ATZ file, copying "<<origlen<<" bytes"<<endl;
+        std::cout<<"no recompressed streams in the ATZ file, copying "<<origlen<<" bytes"<<std::endl;
         #endif // debug
         std::ofstream recfile(reconfile_name, std::ios::out | std::ios::binary | std::ios::trunc);
         recfile.write(reinterpret_cast<char*>(atzBuffer+28), origlen);
@@ -1186,11 +1182,11 @@ int main(int argc, char* argv[]) {
 
     //PHASE 6: verify that the reconstructed file is identical to the original
     if((!recon)&&(!notest)){//if we are just reconstructing we dont have the original file
-        cout<<"Testing...";
+        std::cout<<"Testing...";
         //open the original file and read it in
         infile.open(infile_name, std::ios::in | std::ios::binary);
         if (!infile.is_open()) {
-            cout << "error: open file for input failed!" << endl;
+            std::cout << "error: open file for input failed!" << std::endl;
             abort();
         }
         //getting the size of the file
@@ -1198,7 +1194,7 @@ int main(int argc, char* argv[]) {
         infileSize=infile.tellg();
         infile.seekg (0, infile.beg);
         #ifdef debug
-        cout<<endl<<"Original file size:"<<infileSize<<endl;
+        std::cout<<std::endl<<"Original file size:"<<infileSize<<std::endl;
         #endif // debug
         //setting up read buffer and reading the entire file into the buffer
         rBuffer = new unsigned char[infileSize];
@@ -1208,7 +1204,7 @@ int main(int argc, char* argv[]) {
         //open the reconstructed file and read it in
         recfile.open(reconfile_name, std::ios::in | std::ios::binary);
         if (!recfile.is_open()) {
-            cout << "error: open file for input failed!" << endl;
+            std::cout << "error: open file for input failed!" << std::endl;
             abort();
         }
         //getting the size of the file
@@ -1216,28 +1212,28 @@ int main(int argc, char* argv[]) {
         uint64_t recfileSize=recfile.tellg();
         recfile.seekg (0, recfile.beg);
         #ifdef debug
-        cout<<endl<<"Reconstructed file size:"<<recfileSize<<endl;
+        std::cout<<std::endl<<"Reconstructed file size:"<<recfileSize<<std::endl;
         #endif // debug
         //setting up read buffer and reading the entire file into the buffer
         unsigned char* recBuffer = new unsigned char[recfileSize];
         recfile.read(reinterpret_cast<char*>(recBuffer), recfileSize);
         recfile.close();
         if(infileSize!=recfileSize){
-            cout<<"error: size mismatch";
+            std::cout<<"error: size mismatch";
             abort();
         }
         for (i=0; i<infileSize; i++){
             if (rBuffer[i]!=recBuffer[i]){
-                cout<<"error: byte mismatch "<<i;
+                std::cout<<"error: byte mismatch "<<i;
                 abort();
             }
         }
-        cout<<"OK!"<<endl;
+        std::cout<<"OK!"<<std::endl;
         #ifdef debug
         pauser();
         #endif // debug
         if (remove(reconfile_name.c_str())!=0){//delete the reconstructed file since it was only needed for testing
-            cout<<"error: cannot delete recfile";
+            std::cout<<"error: cannot delete recfile";
             abort();
         }
     }
