@@ -1,6 +1,16 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
 <CodeBlocks_layout_file>
 	<ActiveTarget name="Debug" />
+	<File name="..\tclap\tclap-1.2.1\include\tclap\StdOutput.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="3909" topLine="104" />
+		</Cursor>
+	</File>
+	<File name="..\tclap\tclap-1.2.1\include\tclap\Arg.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="13967" topLine="482" />
+		</Cursor>
+	</File>
 	<File name="..\tclap\tclap-1.2.1\include\tclap\ValueArg.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
 		<Cursor>
 			<Cursor1 position="9622" topLine="242" />
@@ -8,17 +18,18 @@
 	</File>
 	<File name="main.cpp" open="1" top="1" tabpos="1" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
 		<Cursor>
-			<Cursor1 position="38304" topLine="87" />
+			<Cursor1 position="34556" topLine="348" />
 		</Cursor>
 		<Folding>
-			<Collapse line="94" />
-			<Collapse line="166" />
-			<Collapse line="172" />
-			<Collapse line="192" />
-			<Collapse line="331" />
-			<Collapse line="478" />
-			<Collapse line="505" />
-			<Collapse line="549" />
+			<Collapse line="96" />
+			<Collapse line="168" />
+			<Collapse line="174" />
+			<Collapse line="194" />
+			<Collapse line="480" />
+			<Collapse line="507" />
+			<Collapse line="551" />
+			<Collapse line="596" />
+			<Collapse line="640" />
 		</Folding>
 	</File>
 	<File name="..\tclap\tclap-1.2.1\include\tclap\CmdLine.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
@@ -29,16 +40,6 @@
 	<File name="..\tclap\tclap-1.2.1\include\tclap\SwitchArg.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
 		<Cursor>
 			<Cursor1 position="1238" topLine="103" />
-		</Cursor>
-	</File>
-	<File name="..\tclap\tclap-1.2.1\include\tclap\StdOutput.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
-		<Cursor>
-			<Cursor1 position="3909" topLine="104" />
-		</Cursor>
-	</File>
-	<File name="..\tclap\tclap-1.2.1\include\tclap\Arg.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
-		<Cursor>
-			<Cursor1 position="13967" topLine="482" />
 		</Cursor>
 	</File>
 </CodeBlocks_layout_file>

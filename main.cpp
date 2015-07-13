@@ -14,6 +14,7 @@ uint_fast16_t sizediffTresh;//streams are only compared when the size difference
 uint_fast16_t shortcutLength;//stop compression and count mismatches after this many bytes, if we get more than recompTresh then bail early
 uint_fast16_t mismatchTol;//if there are at most this many mismatches consider the stream a full match and stop looking for better parameters
 bool bruteforceWindow=false;//bruteforce the zlib parameters, otherwise only try probable parameters based on the 2-byte header
+uint64_t chunksize=134217728; //128 MB
 
 //debug parameters, not useful for most users
 bool shortcutEnabled=true;//enable speedup shortcut in slow mode
@@ -91,6 +92,7 @@ int doInflate(unsigned char* next_in, uint64_t avail_in, unsigned char* next_out
 bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], std::vector<streamOffset>& offsets, uint64_t offsetno, uint8_t clevel, uint8_t window, uint8_t memlevel);
 void findDeflateParams(unsigned char rBuffer[], std::vector<streamOffset>& streamOffsetList);
 inline bool testParamRange(unsigned char origbuff[], unsigned char decompbuff[], std::vector<streamOffset>& offsets, uint64_t offsetno, uint8_t clevel_min, uint8_t clevel_max, uint8_t window_min, uint8_t window_max, uint8_t memlevel_min, uint8_t memlevel_max);
+int searchFile(std::string infile_name, std::vector<fileOffset>& fileoffsets);
 
 void parseCLI(int argc, char* argv[]){
     // Wrap everything in a try block.  Do this every time,
@@ -568,7 +570,6 @@ void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint
 	offsets.reserve(static_cast<int_fast64_t>(buffLen/1912));
 	#ifdef debug
 	std::cout<<"Offset list initial capacity:"<<offsets.capacity()<<std::endl;
-	pauser();
 	#endif
 
 	uint_fast64_t i;
@@ -586,12 +587,10 @@ void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint
                       << " with " << (1 << ((header >> 12) - 2)) << "K window at offset: " << (i+chunkOffset) << std::endl;
             #endif // debug
             offsets.push_back(fileOffset(i+chunkOffset, offsetType));
-            }
         }
+    }
     #ifdef debug
     std::cout<<std::endl;
-	std::cout<<"Number of collected offsets:"<<offsets.size()<<std::endl;
-    pauser();
     #endif // debug
 }
 
@@ -667,6 +666,37 @@ void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOf
         }
         #endif // debug
     }
+    std::cout<<std::endl;
+}
+
+int searchFile(std::string fname, std::vector<fileOffset>& fileoffsets){
+    std::ifstream f;
+    uint64_t fsize;
+    unsigned char* rBuffer;
+
+        //open the input file and check for error
+	f.open(fname, std::ios::in | std::ios::binary);
+	if (!f.is_open()){
+       std::cout<< "error: open file for input failed!" <<std::endl;
+ 	   return -1;
+	}
+        //get the size of the file
+	f.seekg (0, f.end);
+	fsize=f.tellg();
+	f.seekg (0, f.beg);
+	std::cout<<"Input file size:"<<fsize<<std::endl;
+        //if the file fits into a single chunk read it all in and search it
+	if (fsize<chunksize){
+        rBuffer = new unsigned char[fsize];
+        f.read(reinterpret_cast<char*>(rBuffer), fsize);
+        f.close();
+        searchBuffer(rBuffer, fileoffsets, fsize);
+        std::cout<<"Found "<<fileoffsets.size()<<" zlib headers"<<std::endl;
+        delete [] rBuffer;
+        return 0;
+	}else{
+        return -2;//chunked handling code goes here...
+	}
 }
 
 int main(int argc, char* argv[]) {
@@ -690,15 +720,28 @@ int main(int argc, char* argv[]) {
     std::cout<<"AntiZ 0.1.4-git"<<std::endl;
 
 	//PHASE 0
-	//parse CLI arguments, open input file and read it into memory
-
-	//make sure the file name stings do not hold any uninitialized data
+        //parse CLI arguments, open input file and read it into memory
+        //make sure the file name stings do not hold any uninitialized data
 	infile_name.clear();
 	reconfile_name.clear();
 	atzfile_name.clear();
-    //parse CLI arguments and if needed jump to reconstruction
+        //parse CLI arguments and if needed jump to reconstruction
 	parseCLI(argc, argv);
     if (recon) goto PHASE5;
+    #ifdef debug
+    pauser();
+    #endif // debug
+
+
+    //PHASE 1
+	//search the file for zlib headers, count them and create an offset list
+	if ((searchFile(infile_name, offsetList))!=0) abort();
+	#ifdef debug
+	pauser();
+	#endif // debug
+
+
+
     //open the input file and check for error
 	infile.open(infile_name, std::ios::in | std::ios::binary);
 	if (!infile.is_open()) {
@@ -716,18 +759,13 @@ int main(int argc, char* argv[]) {
     infile.read(reinterpret_cast<char*>(rBuffer), infileSize);
     infile.close();
 
-    //PHASE 1
-	//search the file for zlib headers, count them and create an offset list
-	searchBuffer(rBuffer, offsetList, infileSize);
-    #ifdef debug
-    std::cout<<"Found "<<offsetList.size()<<" zlib headers"<<std::endl;
-    #endif // debug
+
 
     //PHASE 2
     //start trying to decompress at the collected offsets
     //test all offsets found in phase 1
     testOffsetList(rBuffer, infileSize, offsetList, streamOffsetList);
-    std::cout<<"Good offsets: "<<streamOffsetList.size()<<std::endl;
+    std::cout<<"Valid zlib streams: "<<streamOffsetList.size()<<std::endl;
     offsetList.clear();//we only need the good offsets
     offsetList.shrink_to_fit();
     #ifdef debug
