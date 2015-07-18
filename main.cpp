@@ -2,6 +2,7 @@
 #include <fstream>
 #include <vector>
 #include <cmath>
+#include <cstring>//for memset()
 #include <cstdio>
 #include <string>
 #include <iomanip>
@@ -14,7 +15,7 @@ uint_fast16_t sizediffTresh;//streams are only compared when the size difference
 uint_fast16_t shortcutLength;//stop compression and count mismatches after this many bytes, if we get more than recompTresh then bail early
 uint_fast16_t mismatchTol;//if there are at most this many mismatches consider the stream a full match and stop looking for better parameters
 bool bruteforceWindow=false;//bruteforce the zlib parameters, otherwise only try probable parameters based on the 2-byte header
-uint64_t chunksize=134217728; //128 MB
+uint64_t chunksize=65536;//64K
 
 //debug parameters, not useful for most users
 bool shortcutEnabled=true;//enable speedup shortcut in slow mode
@@ -671,7 +672,7 @@ void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOf
 
 int searchFile(std::string fname, std::vector<fileOffset>& fileoffsets){
     std::ifstream f;
-    uint64_t fsize;
+    uint64_t fsize,i;
     unsigned char* rBuffer;
 
         //open the input file and check for error
@@ -695,7 +696,22 @@ int searchFile(std::string fname, std::vector<fileOffset>& fileoffsets){
         delete [] rBuffer;
         return 0;
 	}else{
-        return -2;//chunked handling code goes here...
+        rBuffer = new unsigned char[chunksize];
+        memset(rBuffer, 0, chunksize);
+        f.read(reinterpret_cast<char*>(rBuffer), chunksize);
+        searchBuffer(rBuffer, fileoffsets, chunksize);
+        std::cout<<"Found "<<fileoffsets.size()<<" zlib headers"<<std::endl;
+        i=1;
+        while (!f.eof()){
+            memset(rBuffer, 0, chunksize);
+            f.seekg(-1, f.cur);//seek back one byte because the last byte in the previous chunk never gets parsed
+            f.read(reinterpret_cast<char*>(rBuffer), chunksize);
+            searchBuffer(rBuffer, fileoffsets, chunksize, (i*chunksize-i));
+            i++;
+        }
+        f.close();
+        delete [] rBuffer;
+        return 0;
 	}
 }
 
@@ -736,6 +752,7 @@ int main(int argc, char* argv[]) {
     //PHASE 1
 	//search the file for zlib headers, count them and create an offset list
 	if ((searchFile(infile_name, offsetList))!=0) abort();
+	std::cout<<"Total headers found: "<<offsetList.size()<<std::endl;
 	#ifdef debug
 	pauser();
 	#endif // debug
