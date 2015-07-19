@@ -83,7 +83,6 @@ void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint
 bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, uint64_t& total_out);
 void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets);
 int parseOffsetType(int header);
-void doDeflate(unsigned char* next_in, uint64_t avail_in, unsigned char*& next_out, uint_fast8_t clvl, uint_fast8_t window, uint_fast8_t memlvl, uint64_t& total_in, uint64_t& total_out);
 int doInflate(unsigned char* next_in, uint64_t avail_in, unsigned char* next_out, uint64_t avail_out);
 bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], std::vector<streamOffset>& offsets, uint64_t offsetno, uint8_t clevel, uint8_t window, uint8_t memlevel);
 void findDeflateParams(unsigned char rBuffer[], std::vector<streamOffset>& streamOffsetList);
@@ -479,14 +478,14 @@ bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], std
 int doInflate(unsigned char* next_in, uint64_t avail_in, unsigned char* next_out, uint64_t avail_out){
     //this function takes a zlib stream from next_in and decompresses it to next_out, returning the return value of inflate()
     //the zlib stream must be at most avail_in bytes long and the inflated data must be at most avail_out bytes long
+    //this is a nice, self-contained function, but it does everthing in one pass, so best suited for small streams
     z_stream strm;
     strm.zalloc = Z_NULL;
     strm.zfree = Z_NULL;
     strm.opaque = Z_NULL;
     strm.avail_in = avail_in;
     strm.next_in=next_in;
-    //initialize the stream for decompression and check for error
-    int ret=inflateInit(&strm);
+    int ret=inflateInit(&strm);//initialize the stream for decompression and check for error
     if (ret != Z_OK){
         std::cout<<"inflateInit() failed with exit code:"<<ret<<std::endl;//should never happen normally
         abort();
@@ -501,43 +500,6 @@ int doInflate(unsigned char* next_in, uint64_t avail_in, unsigned char* next_out
         abort();
     }
     return ret2;
-}
-
-void doDeflate(unsigned char* next_in, uint64_t avail_in, unsigned char*& next_out, uint_fast8_t clvl, uint_fast8_t window, uint_fast8_t memlvl, uint64_t& total_in, uint64_t& total_out){
-    //this function takes avail_in bytes from next_in, deflates them using the clvl, window and memlvl parameters
-    //allocates a new array and puts the pointer in next_out, and fills this array with the result of the compression
-    //the consumed input and produced output byte counts are written in total_in and total_out
-    //the dynamic array allocated by this function must be manually deleted to avoid a memory leak
-    z_stream strm;
-    strm.zalloc = Z_NULL;
-    strm.zfree = Z_NULL;
-    strm.opaque = Z_NULL;
-    strm.next_in=next_in;
-    //use all default settings except clevel and memlevel
-    int ret = deflateInit2(&strm, clvl, Z_DEFLATED, window, memlvl, Z_DEFAULT_STRATEGY);
-    if (ret != Z_OK){
-        std::cout<<"deflateInit() failed with exit code:"<<ret<<std::endl;//should never happen normally
-        abort();
-    }
-    //prepare for compressing in one pass
-    strm.avail_in=avail_in;
-    next_out=new unsigned char[deflateBound(&strm, avail_in)]; //allocate output for worst case
-    strm.avail_out=deflateBound(&strm, avail_in);
-    strm.next_out=next_out;
-    ret=deflate(&strm, Z_FINISH);//do the actual compression
-    //check the return value to see if everything went well
-    if (ret != Z_STREAM_END){
-        std::cout<<"deflate() failed with exit code:"<<ret<<std::endl;
-        abort();
-    }
-    total_in=strm.total_in;
-    total_out=strm.total_out;
-    //deallocate the Zlib stream and check if it went well
-    ret=deflateEnd(&strm);
-    if (ret != Z_OK){
-        std::cout<<"deflateEnd() failed with exit code:"<<ret<<std::endl;//should never happen normally
-        abort();
-    }
 }
 
 // A zlib stream has the following structure: (http://tools.ietf.org/html/rfc1950)
