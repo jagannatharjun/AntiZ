@@ -218,10 +218,11 @@ void findDeflateParams(unsigned char rBuffer[], std::vector<streamOffset>& strea
                 #endif // debug
                 //try the most probable parameters first(supplied by header or default)
                 switch (crange){//we need to switch based on the clevel
-                    case 0:{//if the header signals fastest compression try clevel 1, header-supplied window and default memlvl(8)
+                    case 0:{//if the header signals fastest compression try clevel 1 and 0, header-supplied window and default memlvl(8)
                         #ifdef debug
                         std::cout<<"   trying most probable parameters: fastest compression"<<std::endl;
                         #endif // debug
+                        if (testDeflateParams(rBuffer, decompBuffer, streamOffsetList, j, 0, window, 8)) break;
                         if (testDeflateParams(rBuffer, decompBuffer, streamOffsetList, j, 1, window, 8)) break;
                         //if the most probable parameters are not succesful, try all different clevel and memlevel combinations
                         #ifdef debug
