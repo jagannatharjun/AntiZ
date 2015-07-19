@@ -10,7 +10,7 @@ uint_fast16_t sizediffTresh;//streams are only compared when the size difference
 uint_fast16_t shortcutLength;//stop compression and count mismatches after this many bytes, if we get more than recompTresh then bail early
 uint_fast16_t mismatchTol;//if there are at most this many mismatches consider the stream a full match and stop looking for better parameters
 bool bruteforceWindow=false;//bruteforce the zlib parameters, otherwise only try probable parameters based on the 2-byte header
-uint64_t chunksize=16*65536;//64K
+uint64_t chunksize=256*1024;
 
 //debug parameters, not useful for most users
 bool shortcutEnabled=true;//enable speedup shortcut in phase 3
@@ -88,7 +88,7 @@ int doInflate(unsigned char* next_in, uint64_t avail_in, unsigned char* next_out
 bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], std::vector<streamOffset>& offsets, uint64_t offsetno, uint8_t clevel, uint8_t window, uint8_t memlevel);
 void findDeflateParams(unsigned char rBuffer[], std::vector<streamOffset>& streamOffsetList);
 inline bool testParamRange(unsigned char origbuff[], unsigned char decompbuff[], std::vector<streamOffset>& offsets, uint64_t offsetno, uint8_t clevel_min, uint8_t clevel_max, uint8_t window_min, uint8_t window_max, uint8_t memlevel_min, uint8_t memlevel_max);
-void searchFile(std::string fname, uint64_t fsize, std::vector<fileOffset>& fileoffsets);
+void searchFile(std::string fname, std::vector<fileOffset>& fileoffsets);
 int getFilesize(std::string fname, uint64_t& fsize);
 
 void parseCLI(int argc, char* argv[]){
@@ -629,7 +629,7 @@ bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, 
 
 void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets){
     //this function takes a vector of fileOffsets, a buffer of bufflen length and tests if the offsets in the fileOffset vector
-    //are marking the beginning of a valid zlib stream
+    //are marking the beginnings of valid zlib streams
     //the offsets, types, lengths and inflated lengths of valid zlib streams are pushed to a vector of streamOffsets
 	uint64_t numOffsets=fileoffsets.size();
 	uint64_t lastGoodOffset=0;
@@ -640,6 +640,8 @@ void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOf
         if ((lastGoodOffset+lastStreamLength)<=fileoffsets[i].offset){
             //since we have no idea about the length of the zlib stream, take the worst case, i.e. everything after the header belongs to the stream
             uint64_t inbytes, outbytes;
+            inbytes=0;
+            outbytes=0;
             if (CheckOffset((buffer+fileoffsets[i].offset), (bufflen-fileoffsets[i].offset), inbytes, outbytes)){
                 lastGoodOffset=fileoffsets[i].offset;
                 lastStreamLength=inbytes;
@@ -658,35 +660,29 @@ void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOf
     std::cout<<std::endl;
 }
 
-void searchFile(std::string fname, uint64_t fsize, std::vector<fileOffset>& fileoffsets){
+void searchFile(std::string fname, std::vector<fileOffset>& fileoffsets){
     std::ifstream f;
     uint64_t i;
     unsigned char* rBuffer;
 
 	f.open(fname, std::ios::in | std::ios::binary);//open the input file
-	if (fsize<chunksize){//if the file fits into a single chunk read it all in and search it
-        rBuffer = new unsigned char[fsize];
-        f.read(reinterpret_cast<char*>(rBuffer), fsize);
-        searchBuffer(rBuffer, fileoffsets, fsize);
-	}else{
-        rBuffer = new unsigned char[chunksize];
-        memset(rBuffer, 0, chunksize);
+    rBuffer = new unsigned char[chunksize];
+    memset(rBuffer, 0, chunksize);
+    f.read(reinterpret_cast<char*>(rBuffer), chunksize);
+    searchBuffer(rBuffer, fileoffsets, chunksize);//do the 0-th chunk
+    i=1;
+    while (!f.eof()){//read in and process the file until the end of file
+        memset(rBuffer, 0, chunksize);//the buffer needs to be zeroed out, or the last chunk will cause a crash
+        f.seekg(-1, f.cur);//seek back one byte because the last byte in the previous chunk never gets parsed
         f.read(reinterpret_cast<char*>(rBuffer), chunksize);
-        searchBuffer(rBuffer, fileoffsets, chunksize);//do the 0-th chunk
-        i=1;
-        while (!f.eof()){//read in and process the file until the end of file
-            memset(rBuffer, 0, chunksize);//the buffer needs to be zeroed out, or the last chunk will cause a crash
-            f.seekg(-1, f.cur);//seek back one byte because the last byte in the previous chunk never gets parsed
-            f.read(reinterpret_cast<char*>(rBuffer), chunksize);
-            searchBuffer(rBuffer, fileoffsets, chunksize, (i*chunksize-i));
-            i++;
-        }
-	}
+        searchBuffer(rBuffer, fileoffsets, chunksize, (i*chunksize-i));
+        i++;
+    }
 	f.close();
 	delete [] rBuffer;
 }
 
-int getFilesize(std::string fname, uint64_t& fsize){
+inline int getFilesize(std::string fname, uint64_t& fsize){
     std::ifstream f;
     f.open(fname, std::ios::in | std::ios::binary);//open the file and check for error
 	if (!f.is_open()){
@@ -743,7 +739,7 @@ int main(int argc, char* argv[]) {
 	#ifdef debug
 	std::cout<<"Offset list initial capacity:"<<offsetList.capacity()<<std::endl;
 	#endif
-	searchFile(infile_name, infileSize, offsetList);//search the file for zlib headers
+	searchFile(infile_name, offsetList);//search the file for zlib headers
 	std::cout<<"Total zlib headers found: "<<offsetList.size()<<std::endl;
 	#ifdef debug
 	pauser();
