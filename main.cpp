@@ -1,11 +1,6 @@
-#include <iostream>
 #include <fstream>
 #include <vector>
-#include <cmath>
 #include <cstring>//for memset()
-#include <cstdio>
-#include <string>
-#include <iomanip>
 #include <zlib.h>
 #include <tclap/CmdLine.h>
 
@@ -15,10 +10,10 @@ uint_fast16_t sizediffTresh;//streams are only compared when the size difference
 uint_fast16_t shortcutLength;//stop compression and count mismatches after this many bytes, if we get more than recompTresh then bail early
 uint_fast16_t mismatchTol;//if there are at most this many mismatches consider the stream a full match and stop looking for better parameters
 bool bruteforceWindow=false;//bruteforce the zlib parameters, otherwise only try probable parameters based on the 2-byte header
-uint64_t chunksize=65536;//64K
+uint64_t chunksize=16*65536;//64K
 
 //debug parameters, not useful for most users
-bool shortcutEnabled=true;//enable speedup shortcut in slow mode
+bool shortcutEnabled=true;//enable speedup shortcut in phase 3
 int_fast64_t concentrate=-1;//only try to recompress the stream# givel here, negative values disable this and run on all streams, debug tool
 
 //filenames and command line switches
@@ -650,7 +645,7 @@ void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOf
                 lastStreamLength=inbytes;
                 streamoffsets.push_back(streamOffset(fileoffsets[i].offset, fileoffsets[i].offsetType, inbytes, outbytes));
                 #ifdef debug
-                std::cout<<"Offset #"<<i<<" decompressed, "<<inbytes<<" bytes to "<<outbytes<<" bytes"<<std::endl;
+                std::cout<<"Offset #"<<i<<" ("<<fileoffsets[i].offset<<") decompressed, "<<inbytes<<" bytes to "<<outbytes<<" bytes"<<std::endl;
                 #endif // debug
             }
         }
@@ -723,16 +718,14 @@ int main(int argc, char* argv[]) {
     uint64_t numFullmatch=0;
     #endif // debug
     uint64_t recomp=0;
-    std::cout<<"AntiZ 0.1.4-git"<<std::endl;
 
 	//PHASE 0
-        //parse CLI arguments, open input file and read it into memory
-        //make sure the file name stings do not hold any uninitialized data
+    //parse CLI arguments, make sure the file name stings do not hold any uninitialized data
+    std::cout<<"AntiZ 0.1.4-git"<<std::endl;
 	infile_name.clear();
 	reconfile_name.clear();
 	atzfile_name.clear();
-        //parse CLI arguments and if needed jump to reconstruction
-	parseCLI(argc, argv);
+	parseCLI(argc, argv);//parse CLI arguments and if needed jump to reconstruction
     if (recon) goto PHASE5;
     #ifdef debug
     pauser();
@@ -742,7 +735,7 @@ int main(int argc, char* argv[]) {
     //PHASE 1
     //search the file for zlib headers, count them and create an offset list
 
-	if (getFilesize(infile_name, infileSize)!=0) return -1;
+	if (getFilesize(infile_name, infileSize)!=0) return -1;//if opening the file fails, exit
 	std::cout<<"Input file size:"<<infileSize<<std::endl;
     //try to guess the number of potential zlib headers in the file from the file size
     //this value is purely empirical, may need tweaking
@@ -750,8 +743,7 @@ int main(int argc, char* argv[]) {
 	#ifdef debug
 	std::cout<<"Offset list initial capacity:"<<offsetList.capacity()<<std::endl;
 	#endif
-	//search the file for zlib headers
-	searchFile(infile_name, infileSize, offsetList);
+	searchFile(infile_name, infileSize, offsetList);//search the file for zlib headers
 	std::cout<<"Total zlib headers found: "<<offsetList.size()<<std::endl;
 	#ifdef debug
 	pauser();
