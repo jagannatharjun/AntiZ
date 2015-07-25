@@ -1,6 +1,16 @@
 <?xml version="1.0" encoding="UTF-8" standalone="yes" ?>
 <CodeBlocks_layout_file>
 	<ActiveTarget name="Debug" />
+	<File name="..\tclap\tclap-1.2.1\include\tclap\CmdLine.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="12020" topLine="509" />
+		</Cursor>
+	</File>
+	<File name="..\tclap\tclap-1.2.1\include\tclap\SwitchArg.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
+		<Cursor>
+			<Cursor1 position="1238" topLine="103" />
+		</Cursor>
+	</File>
 	<File name="..\tclap\tclap-1.2.1\include\tclap\ValueArg.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
 		<Cursor>
 			<Cursor1 position="9622" topLine="242" />
@@ -16,33 +26,15 @@
 			<Cursor1 position="13967" topLine="482" />
 		</Cursor>
 	</File>
-	<File name="..\tclap\tclap-1.2.1\include\tclap\SwitchArg.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
-		<Cursor>
-			<Cursor1 position="1238" topLine="103" />
-		</Cursor>
-	</File>
-	<File name="..\tclap\tclap-1.2.1\include\tclap\CmdLine.h" open="0" top="0" tabpos="0" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
-		<Cursor>
-			<Cursor1 position="12020" topLine="509" />
-		</Cursor>
-	</File>
 	<File name="main.cpp" open="1" top="1" tabpos="1" split="0" active="1" splitpos="0" zoom_1="0" zoom_2="0">
 		<Cursor>
-			<Cursor1 position="37555" topLine="210" />
+			<Cursor1 position="1217" topLine="318" />
 		</Cursor>
 		<Folding>
-			<Collapse line="96" />
-			<Collapse line="165" />
-			<Collapse line="171" />
-			<Collapse line="191" />
-			<Collapse line="330" />
-			<Collapse line="477" />
-			<Collapse line="504" />
-			<Collapse line="548" />
-			<Collapse line="560" />
-			<Collapse line="585" />
-			<Collapse line="660" />
-			<Collapse line="688" />
+			<Collapse line="95" />
+			<Collapse line="164" />
+			<Collapse line="170" />
+			<Collapse line="190" />
 		</Folding>
 	</File>
 </CodeBlocks_layout_file>

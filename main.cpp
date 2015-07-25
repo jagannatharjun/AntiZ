@@ -10,7 +10,7 @@ uint_fast16_t sizediffTresh;//streams are only compared when the size difference
 uint_fast16_t shortcutLength;//stop compression and count mismatches after this many bytes, if we get more than recompTresh then bail early
 uint_fast16_t mismatchTol;//if there are at most this many mismatches consider the stream a full match and stop looking for better parameters
 bool bruteforceWindow=false;//bruteforce the zlib parameters, otherwise only try probable parameters based on the 2-byte header
-uint64_t chunksize=256*1024;
+uint64_t chunksize=16*1024;
 
 //debug parameters, not useful for most users
 bool shortcutEnabled=true;//enable speedup shortcut in phase 3
@@ -546,6 +546,78 @@ void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint
     #endif // debug
 }
 
+int CheckOffset_chunked(z_stream& strm){
+    //strm MUST be already initialized with inflateInit before calling this function
+    //returns 0 if the stream is valid, 1 if invalid, 2 if the next chunk is needed, negative values for error
+    unsigned char* decompBuffer= new unsigned char[chunksize];//a buffer needs to be created to hold the resulting decompressed data
+    int ret2=-1;
+
+    while (true){
+        strm.next_out=decompBuffer;
+        strm.avail_out=chunksize;
+        int ret=inflate(&strm, Z_FINISH);//try to do the actual decompression in one pass
+        if( ret==Z_STREAM_END){//if we have decompressed the entire stream correctly, it must be valid
+            if (strm.total_in>=16) ret2=0; else ret2=1;//dont care about streams shorter than 16 bytes
+            break;//leave the function with 0 or 1
+        }
+        if (ret==Z_DATA_ERROR){//the stream is invalid
+            ret2=1;
+            break;//leave the function with 1
+        }
+        if (ret!=Z_BUF_ERROR){//if there is an error other than running out of output buffer
+            std::cout<<"ZLIB: "<<ret;
+            abort();
+        }
+
+    };
+    delete [] decompBuffer;
+    return ret2;
+}
+
+void testOffsetList_chunked(unsigned char buffer[], uint64_t bufflen, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets){
+    //this function takes a vector of fileOffsets, a buffer of bufflen length and tests if the offsets in the fileOffset vector
+    //are marking the beginnings of valid zlib streams
+    //the offsets, types, lengths and inflated lengths of valid zlib streams are pushed to a vector of streamOffsets
+	uint64_t numOffsets=fileoffsets.size();
+	uint64_t lastGoodOffset=0;
+	uint64_t lastStreamLength=0;
+	uint64_t i;
+	z_stream strm;
+	strm.zalloc=Z_NULL;
+    strm.zfree=Z_NULL;
+    strm.opaque=Z_NULL;
+    for (i=0; i<numOffsets; i++){
+        //if the current offset is known to be part of the last stream it is pointless to check it
+        if ((lastGoodOffset+lastStreamLength)<=fileoffsets[i].offset){
+            //since we have no idea about the length of the zlib stream, take the worst case, i.e. everything after the header belongs to the stream
+            strm.next_in=buffer+fileoffsets[i].offset;
+            strm.avail_in=bufflen-fileoffsets[i].offset;
+            if (inflateInit(&strm)!=Z_OK){
+                std::cout<<"inflateInit() failed"<<std::endl;
+                abort();
+            }
+            if ((CheckOffset_chunked(strm))==0){
+                lastGoodOffset=fileoffsets[i].offset;
+                lastStreamLength=strm.total_in;
+                streamoffsets.push_back(streamOffset(fileoffsets[i].offset, fileoffsets[i].offsetType, strm.total_in, strm.total_out));
+                #ifdef debug
+                std::cout<<"Offset #"<<i<<" ("<<fileoffsets[i].offset<<") decompressed, "<<strm.total_in<<" bytes to "<<strm.total_out<<" bytes"<<std::endl;
+                #endif // debug
+            }
+            if (inflateEnd(&strm)!=Z_OK){
+                std::cout<<"inflateEnd() failed"<<std::endl;//should never happen normally
+                abort();
+            }
+        }
+        #ifdef debug
+        else{
+            std::cout<<"skipping offset #"<<i<<" ("<<fileoffsets[i].offset<<") because it cannot be a header"<<std::endl;
+        }
+        #endif // debug
+    }
+    std::cout<<std::endl;
+}
+
 bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, uint64_t& total_out){
     //this function checks if there is a valid zlib stream at next_in
     //if yes, then return with true and set the total_in and total_out variables to the deflated and inflated length of the stream
@@ -580,7 +652,7 @@ bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, 
         }
         //deallocate the zlib stream, check for errors and deallocate the decompression buffer
         if (inflateEnd(&strm)!=Z_OK){
-			std::cout<<"inflateEnd() failed with exit code:"<<ret<<std::endl;//should never happen normally
+			std::cout<<"inflateEnd() failed"<<std::endl;//should never happen normally
             abort();
         }
         delete [] decompBuffer;
@@ -729,7 +801,7 @@ int main(int argc, char* argv[]) {
     //PHASE 2
     //start trying to decompress at the collected offsets
     //test all offsets found in phase 1
-    testOffsetList(rBuffer, infileSize, offsetList, streamOffsetList);
+    testOffsetList_chunked(rBuffer, infileSize, offsetList, streamOffsetList);
     std::cout<<"Valid zlib streams: "<<streamOffsetList.size()<<std::endl;
     offsetList.clear();//we only need the good offsets
     offsetList.shrink_to_fit();
