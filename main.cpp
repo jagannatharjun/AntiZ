@@ -88,8 +88,9 @@ bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], std
 void findDeflateParams(unsigned char rBuffer[], std::vector<streamOffset>& streamOffsetList);
 inline bool testParamRange(unsigned char origbuff[], unsigned char decompbuff[], std::vector<streamOffset>& offsets, uint64_t offsetno, uint8_t clevel_min, uint8_t clevel_max, uint8_t window_min, uint8_t window_max, uint8_t memlevel_min, uint8_t memlevel_max);
 void searchFile(std::string fname, std::vector<fileOffset>& fileoffsets);
-int getFilesize(std::string fname, uint64_t& fsize);
-void testOffsetList_chunked(unsigned char buffer[], uint64_t bufflen, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets);
+inline int getFilesize(std::string fname, uint64_t& fsize);
+void testOffsetList_chunked(std::string fname, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets);
+inline int CheckOffset_chunked(z_stream& strm);
 
 void parseCLI(int argc, char* argv[]){
     // Wrap everything in a try block.  Do this every time,
@@ -547,20 +548,18 @@ void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint
     #endif // debug
 }
 
-int CheckOffset_chunked(z_stream& strm){
+inline int CheckOffset_chunked(z_stream& strm){
     //this is kinda like a wrapper function for inflate(), to be used for testing zlib streams
     //since we dont need the inflated data, it can be thrown away to limit memory usage
     //strm MUST be already initialized with inflateInit before calling this function
+    //strm should be deallocated with inflateEnd when done, to prevent memory leak
     //returns 0 if the stream is valid, 1 if invalid, 2 if the next chunk is needed, negative values for error
     unsigned char* decompBuffer= new unsigned char[chunksize];//a buffer needs to be created to hold the resulting decompressed data
-    int ret2=-1;
-
+    int ret2=-9;
     while (true){
         strm.next_out=decompBuffer;
         strm.avail_out=chunksize;
         int ret=inflate(&strm, Z_FINISH);//try to do the actual decompression in one pass
-        std::cout<<"ZLIB: "<<ret<<std::endl;
-        //pauser();
         if( ret==Z_STREAM_END){//if we have decompressed the entire stream correctly, it must be valid
             if (strm.total_in>=16) ret2=0; else ret2=1;//dont care about streams shorter than 16 bytes
             break;//leave the function with 0 or 1
@@ -570,15 +569,13 @@ int CheckOffset_chunked(z_stream& strm){
             break;//leave the function with 1
         }
         if (ret!=Z_BUF_ERROR){//if there is an error other than running out of output buffer
-            std::cout<<"ZLIB: "<<ret<<std::endl;
+            std::cout<<"error, zlib returned with unexpected value: "<<ret<<std::endl;
             abort();
         }
         if (strm.avail_in==0){//if we get buf_error and ran out of input, get next chunk
             ret2=2;
             break;
         }
-        std::cout<<"avail_in: "<<strm.avail_in<<std::endl;
-        std::cout<<"avail_out: "<<strm.avail_out<<std::endl;
     }
     delete [] decompBuffer;
     return ret2;
@@ -615,7 +612,6 @@ void testOffsetList_chunked(std::string fname, std::vector<fileOffset>& fileoffs
                 abort();
             }
             while(true){
-                std::cout<<"calling CheckOffset_chunked, stream "<<i<<std::endl;
                 ret=CheckOffset_chunked(strm);
                 if (ret==0){
                     lastGoodOffset=fileoffsets[i].offset;
@@ -633,6 +629,7 @@ void testOffsetList_chunked(std::string fname, std::vector<fileOffset>& fileoffs
                     strm.next_in=rBuffer;
                     strm.avail_in=chunksize;
                 }
+                if (ret<0) abort();//should never happen normally
             }
             if (inflateEnd(&strm)!=Z_OK){
                 std::cout<<"inflateEnd() failed"<<std::endl;//should never happen normally
