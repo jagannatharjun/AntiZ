@@ -25,9 +25,7 @@ bool notest;
 
 class fileOffset{
 public:
-    fileOffset(){
-        abort();//the default constructor should not be used in this version
-    }
+    fileOffset()=delete;//the default constructor should not be used in this version
     fileOffset(uint64_t os, int ot){
         offset=os;
         offsetType=ot;
@@ -38,9 +36,7 @@ public:
 
 class streamOffset{
 public:
-    streamOffset(){
-        abort();//the default constructor should not be used in this version
-    }
+    streamOffset()=delete;//the default constructor should not be used in this version
     streamOffset(uint64_t os, int ot, uint64_t sl, uint64_t il){
         offset=os;
         offsetType=ot;
@@ -188,6 +184,37 @@ inline bool testParamRange(unsigned char origbuff[], unsigned char decompbuff[],
         }
     }
     return false;
+}
+
+int inflate_f2f(std::string infile, std::string outfile, uint64_t offset){
+    std::ifstream in;
+    std::ofstream out;
+    z_stream strm;
+    unsigned char* inbuff;
+    unsigned char* outbuff;
+    int ret, ret2;
+        //initialize stuff
+    inbuff=new unsigned char[chunksize];
+    outbuff=new unsigned char[chunksize];
+    in.open(infile, std::ios::in | std::ios::binary);//open the input file
+    out.open(outfile, std::ios::out | std::ios::binary | std::ios::trunc);//open the output file
+    if ((!in.is_open())||(!out.is_open())) return -1;//check for error
+    in.seekg(offset);//seek to the beginning of the stream
+    in.read(reinterpret_cast<char*>(inbuff), chunksize);
+    strm.zalloc=Z_NULL;
+    strm.zfree=Z_NULL;
+    strm.opaque=Z_NULL;
+    strm.next_in=inbuff;
+    strm.avail_in=chunksize;
+    strm.next_out=outbuff;
+    strm.avail_out=chunksize;
+    if (inflateInit(&strm)!=Z_OK){//initialize the zlib stream
+        std::cout<<"inflateInit() failed"<<std::endl;
+        abort();
+    }
+    while(true){
+
+    }
 }
 
 void findDeflateParams(unsigned char rBuffer[], std::vector<streamOffset>& streamOffsetList){
@@ -648,6 +675,7 @@ void testOffsetList_chunked(std::string fname, std::vector<fileOffset>& fileoffs
 }
 
 bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, uint64_t& total_out){
+    //OLD CODE
     //this function checks if there is a valid zlib stream at next_in
     //if yes, then return with true and set the total_in and total_out variables to the deflated and inflated length of the stream
 	z_stream strm;
@@ -692,6 +720,7 @@ bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, 
 }
 
 void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets){
+    //OLD CODE
     //this function takes a vector of fileOffsets, a buffer of bufflen length and tests if the offsets in the fileOffset vector
     //are marking the beginnings of valid zlib streams
     //the offsets, types, lengths and inflated lengths of valid zlib streams are pushed to a vector of streamOffsets
