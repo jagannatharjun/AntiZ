@@ -76,8 +76,8 @@ public:
 inline void pauser();
 void parseCLI(int argc, char* argv[]);
 void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint64_t buffLen, uint64_t chunkOffset);
-bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, uint64_t& total_out);
-void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets);
+//bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, uint64_t& total_out);
+//void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets);
 int parseOffsetType(int header);
 int doInflate(unsigned char* next_in, uint64_t avail_in, unsigned char* next_out, uint64_t avail_out);
 bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], std::vector<streamOffset>& offsets, uint64_t offsetno, uint8_t clevel, uint8_t window, uint8_t memlevel);
@@ -87,6 +87,7 @@ void searchFile(std::string fname, std::vector<fileOffset>& fileoffsets);
 inline int getFilesize(std::string fname, uint64_t& fsize);
 void testOffsetList_chunked(std::string fname, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets);
 inline int CheckOffset_chunked(z_stream& strm);
+int inflate_f2f(std::string infile, std::string outfile, uint64_t offset);
 
 void parseCLI(int argc, char* argv[]){
     // Wrap everything in a try block.  Do this every time,
@@ -198,7 +199,13 @@ int inflate_f2f(std::string infile, std::string outfile, uint64_t offset){
     outbuff=new unsigned char[chunksize];
     in.open(infile, std::ios::in | std::ios::binary);//open the input file
     out.open(outfile, std::ios::out | std::ios::binary | std::ios::trunc);//open the output file
-    if ((!in.is_open())||(!out.is_open())) return -1;//check for error
+    if ((!in.is_open())||(!out.is_open())){//check for error
+        in.close();
+        out.close();
+        delete [] inbuff;
+        delete [] outbuff;
+        return -1;
+    }
     in.seekg(offset);//seek to the beginning of the stream
     in.read(reinterpret_cast<char*>(inbuff), chunksize);
     strm.zalloc=Z_NULL;
@@ -212,9 +219,39 @@ int inflate_f2f(std::string infile, std::string outfile, uint64_t offset){
         std::cout<<"inflateInit() failed"<<std::endl;
         abort();
     }
+        //do the decompression
     while(true){
-
+        ret=inflate(&strm, Z_FINISH);
+        if( ret==Z_STREAM_END){//reached the end of the stream correctly
+            ret2=0;
+            out.write(reinterpret_cast<char*>(outbuff), (chunksize-strm.avail_out));//write the last output
+            break;
+        }
+        if (ret!=Z_BUF_ERROR){//if there is an error other than running out of a buffer
+            std::cout<<"error, zlib returned with unexpected value: "<<ret<<std::endl;
+            abort();
+        }
+        if (strm.avail_out==0){//if we get buf_error and ran out of output, write it to file
+            out.write(reinterpret_cast<char*>(outbuff), chunksize);
+            strm.next_out=outbuff;//reuse the buffer
+            strm.avail_out=chunksize;
+        }
+        if (strm.avail_in==0){//if we get buf_error and ran out of input, read in the next chunk
+            in.read(reinterpret_cast<char*>(inbuff), chunksize);
+            strm.next_in=inbuff;
+            strm.avail_in=chunksize;
+        }
     }
+        //clean up and free memory
+    in.close();
+    out.close();
+    if (inflateEnd(&strm)!=Z_OK){
+        std::cout<<"inflateEnd() failed"<<std::endl;//should never happen normally
+        abort();
+    }
+    delete [] inbuff;
+    delete [] outbuff;
+    return ret2;
 }
 
 void findDeflateParams(unsigned char rBuffer[], std::vector<streamOffset>& streamOffsetList){
@@ -674,7 +711,7 @@ void testOffsetList_chunked(std::string fname, std::vector<fileOffset>& fileoffs
     delete [] rBuffer;
 }
 
-bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, uint64_t& total_out){
+/*bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, uint64_t& total_out){
     //OLD CODE
     //this function checks if there is a valid zlib stream at next_in
     //if yes, then return with true and set the total_in and total_out variables to the deflated and inflated length of the stream
@@ -751,7 +788,7 @@ void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOf
         #endif // debug
     }
     std::cout<<std::endl;
-}
+}*/
 
 void searchFile(std::string fname, std::vector<fileOffset>& fileoffsets){
     std::ifstream f;
@@ -903,6 +940,7 @@ int main(int argc, char* argv[]) {
         if (((streamOffsetList[j].streamLength-streamOffsetList[j].identBytes)<=recompTresh)&&(streamOffsetList[j].identBytes>0)){
             recomp++;
         }
+        //inflate_f2f(infile_name, ("temp"+std::to_string(j)), streamOffsetList[j].offset);
     }
     std::cout<<"recompressed:"<<recomp<<"/"<<streamOffsetList.size()<<std::endl;
 
