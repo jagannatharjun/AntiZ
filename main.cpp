@@ -254,6 +254,96 @@ int inflate_f2f(std::string infile, std::string outfile, uint64_t offset){
     return ret2;
 }
 
+void findDeflateParams_stream(unsigned char rBuffer[], unsigned char decompBuffer[], streamOffset& streamobj){
+    uint8_t window= 10 + (streamobj.offsetType / 4);
+    uint8_t crange = streamobj.offsetType % 4;
+    #ifdef debug
+    std::cout<<"   stream type: "<<streamobj.offsetType<<std::endl;
+    std::cout<<"   window and crange from header: "<<+window<<" ; "<<+crange<<std::endl;
+    #endif // debug
+    //try the most probable parameters first(supplied by header or default)
+    switch (crange){//we need to switch based on the clevel
+        case 0:{//if the header signals fastest compression try clevel 1 and 0, header-supplied window and default memlvl(8)
+            #ifdef debug
+            std::cout<<"   trying most probable parameters: fastest compression"<<std::endl;
+            #endif // debug
+            if (testDeflateParams(rBuffer, decompBuffer, streamobj, 0, window, 8)) break;
+            if (testDeflateParams(rBuffer, decompBuffer, streamobj, 1, window, 8)) break;
+            //if the most probable parameters are not succesful, try all different clevel and memlevel combinations
+            #ifdef debug
+            std::cout<<"   trying less probable parameters: fastest compression"<<std::endl;
+            #endif // debug
+            if (testDeflateParams(rBuffer, decompBuffer, streamobj, 1, window, 9)) break;//try all memlvls for the most probable clvl
+            if (testParamRange(rBuffer, decompBuffer, streamobj, 1, 1, window, window, 1, 7)) break;
+            //try all clvl/memlvl combinations that have not been tried yet
+            testParamRange(rBuffer, decompBuffer, streamobj, 2, 9, window, window, 1, 9);
+            break;
+        }
+        case 1:{//if the header signals fast compression try clevel 2-5, header-supplied window and default memlvl(8)
+            #ifdef debug
+            std::cout<<"   trying most probable parameters: fast compression"<<std::endl;
+            #endif // debug
+            if (testParamRange(rBuffer, decompBuffer, streamobj, 2, 5, window, window, 8, 8)) break;
+            //if the most probable parameters are not succesful, try all different clevel and memlevel combinations
+            #ifdef debug
+            std::cout<<"   trying less probable parameters: fast compression"<<std::endl<<std::endl;
+            #endif // debug
+            if (testParamRange(rBuffer, decompBuffer, streamobj, 2, 5, window, window, 1, 7)) break;
+            if (testParamRange(rBuffer, decompBuffer, streamobj, 2, 5, window, window, 9, 9)) break;
+
+            if (testParamRange(rBuffer, decompBuffer, streamobj, 1, 1, window, window, 1, 9)) break;
+            testParamRange(rBuffer, decompBuffer, streamobj, 6, 9, window, window, 1, 9);
+            break;
+        }
+        case 2:{//if the header signals default compression only try clevel 6, header-supplied window and default memlvl(8)
+            #ifdef debug
+            std::cout<<"   trying most probable parameters: default compression"<<std::endl;
+            #endif // debug
+            if (testDeflateParams(rBuffer, decompBuffer, streamobj, 6, window, 8)) break;
+            //if the most probable parameters are not succesful, try all different clevel and memlevel combinations
+            #ifdef debug
+            std::cout<<"   trying less probable parameters: default compression"<<std::endl<<std::endl;
+            #endif // debug
+            if (testDeflateParams(rBuffer, decompBuffer, streamobj, 6, window, 9)) break;
+            if (testParamRange(rBuffer, decompBuffer, streamobj, 6, 6, window, window, 1, 7)) break;
+
+            if (testParamRange(rBuffer, decompBuffer, streamobj, 1, 5, window, window, 1, 9)) break;
+            testParamRange(rBuffer, decompBuffer, streamobj, 7, 9, window, window, 1, 9);
+            break;
+        }
+        case 3:{//if the header signals best compression only try clevel 7-9, header-supplied window and default memlvl(8)
+            #ifdef debug
+            std::cout<<"   trying most probable parameters: best compression"<<std::endl;
+            #endif // debug
+            if (testParamRange(rBuffer, decompBuffer, streamobj, 7, 9, window, window, 8, 8)) break;
+            //if the most probable parameters are not succesful, try all different clevel and memlevel combinations
+            #ifdef debug
+            std::cout<<"   trying less probable parameters: best compression"<<std::endl<<std::endl;
+            #endif // debug
+            if (testParamRange(rBuffer, decompBuffer, streamobj, 7, 9, window, window, 1, 7)) break;
+            if (testParamRange(rBuffer, decompBuffer, streamobj, 7, 9, window, window, 9, 9)) break;
+
+            testParamRange(rBuffer, decompBuffer, streamobj, 1, 6, window, window, 1, 9);
+            break;
+        }
+        default:{//this should never happen
+            abort();
+        }
+    }
+    if (((streamobj.streamLength-streamobj.identBytes)>=mismatchTol)&&(bruteforceWindow)){//if bruteforcing is turned on and needed, try all remaining combinations
+        if (window==10){
+            testParamRange(rBuffer, decompBuffer, streamobj, 1, 9, 11, 15, 1, 9);
+        }else{
+            if (window==15){
+                testParamRange(rBuffer, decompBuffer, streamobj, 1, 9, 10, 14, 1, 9);
+            }else{//if window is in the 11-14 range
+                if (testParamRange(rBuffer, decompBuffer, streamobj, 1, 9, 10, (window-1), 1, 9)) return;
+                testParamRange(rBuffer, decompBuffer, streamobj, 1, 9, (window+1), 15, 1, 9);
+            }
+        }
+    }
+}
+
 void findDeflateParams_ALL(unsigned char rBuffer[], std::vector<streamOffset>& streamOffsetList){
     //this function takes a buffer and a vector containing information about the valid zlib streams in the buffer
     //it tries to find the best parameters for recompression, the results are stored in the vector
@@ -270,122 +360,16 @@ void findDeflateParams_ALL(unsigned char rBuffer[], std::vector<streamOffset>& s
         unsigned char* decompBuffer= new unsigned char[streamOffsetList[i].inflatedLength];
         int ret=doInflate((rBuffer+streamOffsetList[i].offset), streamOffsetList[i].streamLength, decompBuffer, streamOffsetList[i].inflatedLength);
         //check the return value
-        switch (ret){
-            case Z_STREAM_END: //decompression was succesful
-            {
-                uint8_t window= 10 + (streamOffsetList[i].offsetType / 4);
-                uint8_t crange = streamOffsetList[i].offsetType % 4;
-                #ifdef debug
-                std::cout<<std::endl;
-                std::cout<<"stream #"<<i<<"("<<streamOffsetList[i].offset<<")"<<" ready for recompression trials"<<std::endl;
-                std::cout<<"   stream type: "<<streamOffsetList[i].offsetType<<std::endl;
-                std::cout<<"   window and crange from header: "<<+window<<" ; "<<+crange<<std::endl;
-                #endif // debug
-                //try the most probable parameters first(supplied by header or default)
-                switch (crange){//we need to switch based on the clevel
-                    case 0:{//if the header signals fastest compression try clevel 1 and 0, header-supplied window and default memlvl(8)
-                        #ifdef debug
-                        std::cout<<"   trying most probable parameters: fastest compression"<<std::endl;
-                        #endif // debug
-                        if (testDeflateParams(rBuffer, decompBuffer, streamOffsetList[i], 0, window, 8)) break;
-                        if (testDeflateParams(rBuffer, decompBuffer, streamOffsetList[i], 1, window, 8)) break;
-                        //if the most probable parameters are not succesful, try all different clevel and memlevel combinations
-                        #ifdef debug
-                        std::cout<<"   trying less probable parameters: fastest compression"<<std::endl;
-                        #endif // debug
-                        if (testDeflateParams(rBuffer, decompBuffer, streamOffsetList[i], 1, window, 9)) break;//try all memlvls for the most probable clvl
-                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 1, 1, window, window, 1, 7)) break;
-                        //try all clvl/memlvl combinations that have not been tried yet
-                        testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 2, 9, window, window, 1, 9);
-                        break;
-                    }
-                    case 1:{//if the header signals fast compression try clevel 2-5, header-supplied window and default memlvl(8)
-                        #ifdef debug
-                        std::cout<<"   trying most probable parameters: fast compression"<<std::endl;
-                        #endif // debug
-                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 2, 5, window, window, 8, 8)) break;
-                        //if the most probable parameters are not succesful, try all different clevel and memlevel combinations
-                        #ifdef debug
-                        std::cout<<"   trying less probable parameters: fast compression"<<std::endl<<std::endl;
-                        #endif // debug
-                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 2, 5, window, window, 1, 7)) break;
-                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 2, 5, window, window, 9, 9)) break;
-
-                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 1, 1, window, window, 1, 9)) break;
-                        testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 6, 9, window, window, 1, 9);
-                        break;
-                    }
-                    case 2:{//if the header signals default compression only try clevel 6, header-supplied window and default memlvl(8)
-                        #ifdef debug
-                        std::cout<<"   trying most probable parameters: default compression"<<std::endl;
-                        #endif // debug
-                        if (testDeflateParams(rBuffer, decompBuffer, streamOffsetList[i], 6, window, 8)) break;
-                        //if the most probable parameters are not succesful, try all different clevel and memlevel combinations
-                        #ifdef debug
-                        std::cout<<"   trying less probable parameters: default compression"<<std::endl<<std::endl;
-                        #endif // debug
-                        if (testDeflateParams(rBuffer, decompBuffer, streamOffsetList[i], 6, window, 9)) break;
-                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 6, 6, window, window, 1, 7)) break;
-
-                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 1, 5, window, window, 1, 9)) break;
-                        testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 7, 9, window, window, 1, 9);
-                        break;
-                    }
-                    case 3:{//if the header signals best compression only try clevel 7-9, header-supplied window and default memlvl(8)
-                        #ifdef debug
-                        std::cout<<"   trying most probable parameters: best compression"<<std::endl;
-                        #endif // debug
-                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 7, 9, window, window, 8, 8)) break;
-                        //if the most probable parameters are not succesful, try all different clevel and memlevel combinations
-                        #ifdef debug
-                        std::cout<<"   trying less probable parameters: best compression"<<std::endl<<std::endl;
-                        #endif // debug
-                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 7, 9, window, window, 1, 7)) break;
-                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 7, 9, window, window, 9, 9)) break;
-
-                        testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 1, 6, window, window, 1, 9);
-                        break;
-                    }
-                    default:{//this should never happen
-                        abort();
-                    }
-                }
-                //if bruteforcing is turned on and needed, try all remaining combinations
-                if (((streamOffsetList[i].streamLength-streamOffsetList[i].identBytes)>=mismatchTol)&&(bruteforceWindow)){//if bruteforcing is turned on try all remaining combinations
-                    #ifdef debug
-                    std::cout<<"bruteforcing strm #"<<i<<std::endl;
-                    #endif // debug
-                    if (window==10){
-                        testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 1, 9, 11, 15, 1, 9);
-                    }else{
-                        if (window==15){
-                            testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 1, 9, 10, 14, 1, 9);
-                        }else{//if window is in the 11-14 range
-                            if (testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 1, 9, 10, (window-1), 1, 9)) break;
-                            testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 1, 9, (window+1), 15, 1, 9);
-                        }
-                    }
-                }
-                break;
-            }
-            case Z_DATA_ERROR: //the compressed data was invalid, this should never happen since the offsets have been checked
-            {
-                std::cout<<"inflate() failed with data error"<<std::endl;
-                pauser();
-                abort();
-            }
-            case Z_BUF_ERROR: //this should not happen since the decompressed lengths are known
-            {
-                std::cout<<"inflate() failed with memory error"<<std::endl;
-                pauser();
-                abort();
-            }
-            default: //shit hit the fan, should never happen normally
-            {
-                std::cout<<"inflate() failed with exit code:"<<ret<<std::endl;
-                pauser();
-                abort();
-            }
+        if (ret==Z_STREAM_END){
+            #ifdef debug
+            std::cout<<std::endl;
+            std::cout<<"stream #"<<i<<"("<<streamOffsetList[i].offset<<")"<<" ready for recompression trials"<<std::endl;
+            #endif // debug
+            findDeflateParams_stream(rBuffer, decompBuffer, streamOffsetList[i]);
+        } else {//shit hit the fan, should never happen
+            std::cout<<"inflate() failed with exit code:"<<ret<<std::endl;
+            pauser();
+            abort();
         }
         if (((streamOffsetList[i].streamLength-streamOffsetList[i].identBytes)<=recompTresh)&&(streamOffsetList[i].identBytes>0)){
             streamOffsetList[i].recomp=true;
