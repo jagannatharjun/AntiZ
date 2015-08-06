@@ -80,9 +80,9 @@ void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint
 //void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets);
 int parseOffsetType(int header);
 int doInflate(unsigned char* next_in, uint64_t avail_in, unsigned char* next_out, uint64_t avail_out);
-bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], std::vector<streamOffset>& offsets, uint64_t offsetno, uint8_t clevel, uint8_t window, uint8_t memlevel);
+bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], streamOffset& streamobj, uint8_t clevel, uint8_t window, uint8_t memlevel);
 void findDeflateParams_ALL(unsigned char rBuffer[], std::vector<streamOffset>& streamOffsetList);
-inline bool testParamRange(unsigned char origbuff[], unsigned char decompbuff[], std::vector<streamOffset>& offsets, uint64_t offsetno, uint8_t clevel_min, uint8_t clevel_max, uint8_t window_min, uint8_t window_max, uint8_t memlevel_min, uint8_t memlevel_max);
+inline bool testParamRange(unsigned char origbuff[], unsigned char decompbuff[], streamOffset& streamobj, uint8_t clevel_min, uint8_t clevel_max, uint8_t window_min, uint8_t window_max, uint8_t memlevel_min, uint8_t memlevel_max);
 void searchFile(std::string fname, std::vector<fileOffset>& fileoffsets);
 inline int getFilesize(std::string fname, uint64_t& fsize);
 void testOffsetList_chunked(std::string fname, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets);
@@ -167,14 +167,14 @@ inline void pauser(){
     std::getline(std::cin, dummy);
 }
 
-inline bool testParamRange(unsigned char origbuff[], unsigned char decompbuff[], std::vector<streamOffset>& offsets, uint64_t offsetno, uint8_t clevel_min, uint8_t clevel_max, uint8_t window_min, uint8_t window_max, uint8_t memlevel_min, uint8_t memlevel_max){
+inline bool testParamRange(unsigned char origbuff[], unsigned char decompbuff[], streamOffset& streamobj, uint8_t clevel_min, uint8_t clevel_max, uint8_t window_min, uint8_t window_max, uint8_t memlevel_min, uint8_t memlevel_max){
     //this function tests a given range of deflate parameters
     uint8_t clevel, memlevel, window;
     bool fullmatch;
     for(window=window_max; window>=window_min; window--){
         for(memlevel=memlevel_max; memlevel>=memlevel_min; memlevel--){
             for(clevel=clevel_max; clevel>=clevel_min; clevel--){
-                fullmatch=testDeflateParams(origbuff, decompbuff, offsets, offsetno, clevel, window, memlevel);
+                fullmatch=testDeflateParams(origbuff, decompbuff, streamobj, clevel, window, memlevel);
                 if (fullmatch){
                     #ifdef debug
                     std::cout<<"   recompression succesful within tolerance, bailing"<<std::endl;
@@ -287,63 +287,63 @@ void findDeflateParams_ALL(unsigned char rBuffer[], std::vector<streamOffset>& s
                         #ifdef debug
                         std::cout<<"   trying most probable parameters: fastest compression"<<std::endl;
                         #endif // debug
-                        if (testDeflateParams(rBuffer, decompBuffer, streamOffsetList, i, 0, window, 8)) break;
-                        if (testDeflateParams(rBuffer, decompBuffer, streamOffsetList, i, 1, window, 8)) break;
+                        if (testDeflateParams(rBuffer, decompBuffer, streamOffsetList[i], 0, window, 8)) break;
+                        if (testDeflateParams(rBuffer, decompBuffer, streamOffsetList[i], 1, window, 8)) break;
                         //if the most probable parameters are not succesful, try all different clevel and memlevel combinations
                         #ifdef debug
                         std::cout<<"   trying less probable parameters: fastest compression"<<std::endl;
                         #endif // debug
-                        if (testDeflateParams(rBuffer, decompBuffer, streamOffsetList, i, 1, window, 9)) break;//try all memlvls for the most probable clvl
-                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList, i, 1, 1, window, window, 1, 7)) break;
+                        if (testDeflateParams(rBuffer, decompBuffer, streamOffsetList[i], 1, window, 9)) break;//try all memlvls for the most probable clvl
+                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 1, 1, window, window, 1, 7)) break;
                         //try all clvl/memlvl combinations that have not been tried yet
-                        testParamRange(rBuffer, decompBuffer, streamOffsetList, i, 2, 9, window, window, 1, 9);
+                        testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 2, 9, window, window, 1, 9);
                         break;
                     }
                     case 1:{//if the header signals fast compression try clevel 2-5, header-supplied window and default memlvl(8)
                         #ifdef debug
                         std::cout<<"   trying most probable parameters: fast compression"<<std::endl;
                         #endif // debug
-                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList, i, 2, 5, window, window, 8, 8)) break;
+                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 2, 5, window, window, 8, 8)) break;
                         //if the most probable parameters are not succesful, try all different clevel and memlevel combinations
                         #ifdef debug
                         std::cout<<"   trying less probable parameters: fast compression"<<std::endl<<std::endl;
                         #endif // debug
-                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList, i, 2, 5, window, window, 1, 7)) break;
-                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList, i, 2, 5, window, window, 9, 9)) break;
+                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 2, 5, window, window, 1, 7)) break;
+                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 2, 5, window, window, 9, 9)) break;
 
-                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList, i, 1, 1, window, window, 1, 9)) break;
-                        testParamRange(rBuffer, decompBuffer, streamOffsetList, i, 6, 9, window, window, 1, 9);
+                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 1, 1, window, window, 1, 9)) break;
+                        testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 6, 9, window, window, 1, 9);
                         break;
                     }
                     case 2:{//if the header signals default compression only try clevel 6, header-supplied window and default memlvl(8)
                         #ifdef debug
                         std::cout<<"   trying most probable parameters: default compression"<<std::endl;
                         #endif // debug
-                        if (testDeflateParams(rBuffer, decompBuffer, streamOffsetList, i, 6, window, 8)) break;
+                        if (testDeflateParams(rBuffer, decompBuffer, streamOffsetList[i], 6, window, 8)) break;
                         //if the most probable parameters are not succesful, try all different clevel and memlevel combinations
                         #ifdef debug
                         std::cout<<"   trying less probable parameters: default compression"<<std::endl<<std::endl;
                         #endif // debug
-                        if (testDeflateParams(rBuffer, decompBuffer, streamOffsetList, i, 6, window, 9)) break;
-                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList, i, 6, 6, window, window, 1, 7)) break;
+                        if (testDeflateParams(rBuffer, decompBuffer, streamOffsetList[i], 6, window, 9)) break;
+                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 6, 6, window, window, 1, 7)) break;
 
-                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList, i, 1, 5, window, window, 1, 9)) break;
-                        testParamRange(rBuffer, decompBuffer, streamOffsetList, i, 7, 9, window, window, 1, 9);
+                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 1, 5, window, window, 1, 9)) break;
+                        testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 7, 9, window, window, 1, 9);
                         break;
                     }
                     case 3:{//if the header signals best compression only try clevel 7-9, header-supplied window and default memlvl(8)
                         #ifdef debug
                         std::cout<<"   trying most probable parameters: best compression"<<std::endl;
                         #endif // debug
-                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList, i, 7, 9, window, window, 8, 8)) break;
+                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 7, 9, window, window, 8, 8)) break;
                         //if the most probable parameters are not succesful, try all different clevel and memlevel combinations
                         #ifdef debug
                         std::cout<<"   trying less probable parameters: best compression"<<std::endl<<std::endl;
                         #endif // debug
-                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList, i, 7, 9, window, window, 1, 7)) break;
-                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList, i, 7, 9, window, window, 9, 9)) break;
+                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 7, 9, window, window, 1, 7)) break;
+                        if (testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 7, 9, window, window, 9, 9)) break;
 
-                        testParamRange(rBuffer, decompBuffer, streamOffsetList, i, 1, 6, window, window, 1, 9);
+                        testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 1, 6, window, window, 1, 9);
                         break;
                     }
                     default:{//this should never happen
@@ -356,13 +356,13 @@ void findDeflateParams_ALL(unsigned char rBuffer[], std::vector<streamOffset>& s
                     std::cout<<"bruteforcing strm #"<<i<<std::endl;
                     #endif // debug
                     if (window==10){
-                        testParamRange(rBuffer, decompBuffer, streamOffsetList, i, 1, 9, 11, 15, 1, 9);
+                        testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 1, 9, 11, 15, 1, 9);
                     }else{
                         if (window==15){
-                            testParamRange(rBuffer, decompBuffer, streamOffsetList, i, 1, 9, 10, 14, 1, 9);
+                            testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 1, 9, 10, 14, 1, 9);
                         }else{//if window is in the 11-14 range
-                            if (testParamRange(rBuffer, decompBuffer, streamOffsetList, i, 1, 9, 10, (window-1), 1, 9)) break;
-                            testParamRange(rBuffer, decompBuffer, streamOffsetList, i, 1, 9, (window+1), 15, 1, 9);
+                            if (testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 1, 9, 10, (window-1), 1, 9)) break;
+                            testParamRange(rBuffer, decompBuffer, streamOffsetList[i], 1, 9, (window+1), 15, 1, 9);
                         }
                     }
                 }
@@ -394,7 +394,7 @@ void findDeflateParams_ALL(unsigned char rBuffer[], std::vector<streamOffset>& s
     }
 }
 
-bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], std::vector<streamOffset>& offsets, uint64_t offsetno, uint8_t clevel, uint8_t window, uint8_t memlevel){
+bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], streamOffset& streamobj, uint8_t clevel, uint8_t window, uint8_t memlevel){
     //tests if the supplied deflate params(clevel, memlevel, window) are better for recompressing the given streamoffset
     //if yes, then update the streamoffset object to the new best values, and if mismatch is within tolerance then return true
     int ret;
@@ -418,12 +418,12 @@ bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], std
         abort();
     }
     //create a buffer to hold the recompressed data
-    unsigned char* recompBuffer= new unsigned char[deflateBound(&strm, offsets[offsetno].inflatedLength)];
-    strm.avail_in= offsets[offsetno].inflatedLength;
+    unsigned char* recompBuffer= new unsigned char[deflateBound(&strm, streamobj.inflatedLength)];
+    strm.avail_in= streamobj.inflatedLength;
     strm.next_out= recompBuffer;
     bool doFullStream=true;
     bool shortcut=false;
-    if ((shortcutEnabled)&&(offsets[offsetno].streamLength>shortcutLength)){//if the stream is big and shortcuts are enabled
+    if ((shortcutEnabled)&&(streamobj.streamLength>shortcutLength)){//if the stream is big and shortcuts are enabled
         shortcut=true;
         identBytes=0;
         strm.avail_out= shortcutLength;//only get a portion of the compressed data
@@ -436,7 +436,7 @@ bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], std
         std::cout<<"   shortcut: "<<strm.total_in<<" bytes compressed to "<<strm.total_out<<" bytes"<<std::endl;
         #endif // debug
         for (i=0;i<strm.total_out;i++){
-            if (recompBuffer[i]==origbuff[(i+offsets[offsetno].offset)]){
+            if (recompBuffer[i]==origbuff[(i+streamobj.offset)]){
                 identBytes++;
             }
         }
@@ -448,9 +448,9 @@ bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], std
     if (doFullStream){
         identBytes=0;
         if (shortcut){
-            strm.avail_out=deflateBound(&strm, offsets[offsetno].inflatedLength)-shortcutLength;
+            strm.avail_out=deflateBound(&strm, streamobj.inflatedLength)-shortcutLength;
         }else{
-            strm.avail_out=deflateBound(&strm, offsets[offsetno].inflatedLength);
+            strm.avail_out=deflateBound(&strm, streamobj.inflatedLength);
         }
         ret=deflate(&strm, Z_FINISH);//do the actual compression
         //check the return value to see if everything went well
@@ -459,67 +459,67 @@ bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], std
             abort();
         }
         #ifdef debug
-        std::cout<<"   size difference: "<<(static_cast<int64_t>(strm.total_out)-static_cast<int64_t>(offsets[offsetno].streamLength))<<std::endl;
+        std::cout<<"   size difference: "<<(static_cast<int64_t>(strm.total_out)-static_cast<int64_t>(streamobj.streamLength))<<std::endl;
         #endif // debug
         uint64_t smaller;
-        if (abs((strm.total_out-offsets[offsetno].streamLength))<=sizediffTresh){//if the size difference is not more than the treshold
-            if (strm.total_out<offsets[offsetno].streamLength){//this is to prevent an array overread
+        if (abs((strm.total_out-streamobj.streamLength))<=sizediffTresh){//if the size difference is not more than the treshold
+            if (strm.total_out<streamobj.streamLength){//this is to prevent an array overread
                 smaller=strm.total_out;
             } else {
-                smaller=offsets[offsetno].streamLength;
+                smaller=streamobj.streamLength;
             }
             for (i=0; i<smaller;i++){
-                if (recompBuffer[i]==origbuff[(i+offsets[offsetno].offset)]){
+                if (recompBuffer[i]==origbuff[(i+streamobj.offset)]){
                     identBytes++;
                 }
             }
             #ifdef debug
-            std::cout<<"   diffBytes: "<<(offsets[offsetno].streamLength-identBytes)<<std::endl;
+            std::cout<<"   diffBytes: "<<(streamobj.streamLength-identBytes)<<std::endl;
             #endif // debug
-            if (identBytes>offsets[offsetno].identBytes){//if this recompressed stream has more matching bytes than the previous best
-                offsets[offsetno].identBytes=identBytes;
-                offsets[offsetno].clevel=clevel;
-                offsets[offsetno].memlvl=memlevel;
-                offsets[offsetno].window=window;
-                offsets[offsetno].firstDiffByte=-1;
-                offsets[offsetno].diffByteOffsets.clear();
-                offsets[offsetno].diffByteVal.clear();
+            if (identBytes>streamobj.identBytes){//if this recompressed stream has more matching bytes than the previous best
+                streamobj.identBytes=identBytes;
+                streamobj.clevel=clevel;
+                streamobj.memlvl=memlevel;
+                streamobj.window=window;
+                streamobj.firstDiffByte=-1;
+                streamobj.diffByteOffsets.clear();
+                streamobj.diffByteVal.clear();
                 uint64_t last_i=0;
-                if (identBytes==offsets[offsetno].streamLength){//if we have a full match set the flag to bail from the nested loops
+                if (identBytes==streamobj.streamLength){//if we have a full match set the flag to bail from the nested loops
                     #ifdef debug
                     std::cout<<"   recompression succesful, full match"<<std::endl;
                     #endif // debug
                     fullmatch=true;
                 } else {//there are different bytes and/or bytes at the end
-                    if (identBytes+mismatchTol>=offsets[offsetno].streamLength) fullmatch=true;//if at most mismatchTol bytes diff bail from the loop
+                    if (identBytes+mismatchTol>=streamobj.streamLength) fullmatch=true;//if at most mismatchTol bytes diff bail from the loop
                         for (i=0; i<smaller;i++){//diff it
-                            if (recompBuffer[i]!=origbuff[(i+offsets[offsetno].offset)]){//if a mismatching byte is found
-                                if (offsets[offsetno].firstDiffByte<0){//if the first different byte is negative, then this is the first
-                                    offsets[offsetno].firstDiffByte=(i);
-                                    offsets[offsetno].diffByteOffsets.push_back(0);
-                                    offsets[offsetno].diffByteVal.push_back(origbuff[(i+offsets[offsetno].offset)]);
+                            if (recompBuffer[i]!=origbuff[(i+streamobj.offset)]){//if a mismatching byte is found
+                                if (streamobj.firstDiffByte<0){//if the first different byte is negative, then this is the first
+                                    streamobj.firstDiffByte=(i);
+                                    streamobj.diffByteOffsets.push_back(0);
+                                    streamobj.diffByteVal.push_back(origbuff[(i+streamobj.offset)]);
                                     #ifdef debug
                                     std::cout<<"   first diff byte:"<<i<<std::endl;
                                     #endif // debug
                                     last_i=i;
                                 } else {
-                                    offsets[offsetno].diffByteOffsets.push_back(i-last_i);
-                                    offsets[offsetno].diffByteVal.push_back(origbuff[(i+offsets[offsetno].offset)]);
+                                    streamobj.diffByteOffsets.push_back(i-last_i);
+                                    streamobj.diffByteVal.push_back(origbuff[(i+streamobj.offset)]);
                                     //cout<<"   different byte:"<<i<<endl;
                                     last_i=i;
                                 }
                             }
                         }
-                        if (strm.total_out<offsets[offsetno].streamLength){//if the recompressed stream is shorter we need to add bytes after diffing
-                            for (i=0; i<(offsets[offsetno].streamLength-strm.total_out); i++){//adding bytes
+                        if (strm.total_out<streamobj.streamLength){//if the recompressed stream is shorter we need to add bytes after diffing
+                            for (i=0; i<(streamobj.streamLength-strm.total_out); i++){//adding bytes
                                 if ((i==0)&&((last_i+1)<strm.total_out)){//if the last byte of the recompressed stream was a match
-                                    offsets[offsetno].diffByteOffsets.push_back(strm.total_out-last_i);
+                                    streamobj.diffByteOffsets.push_back(strm.total_out-last_i);
                                 } else{
-                                    offsets[offsetno].diffByteOffsets.push_back(1);
+                                    streamobj.diffByteOffsets.push_back(1);
                                 }
-                                offsets[offsetno].diffByteVal.push_back(origbuff[(i+strm.total_out+offsets[offsetno].offset)]);
+                                streamobj.diffByteVal.push_back(origbuff[(i+strm.total_out+streamobj.offset)]);
                                 #ifdef debug
-                                std::cout<<"   byte at the end added :"<<+origbuff[(i+strm.total_out+offsets[offsetno].offset)]<<std::endl;
+                                std::cout<<"   byte at the end added :"<<+origbuff[(i+strm.total_out+streamobj.offset)]<<std::endl;
                                 #endif // debug
                             }
                         }
