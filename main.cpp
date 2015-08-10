@@ -23,6 +23,50 @@ std::string atzfile_name;
 bool recon;
 bool notest;
 
+class inbuffer{
+public:
+    inbuffer()=delete;//the default constructor should not be used in this version
+    inbuffer(std::string fname, uint64_t bs, uint64_t sp){
+        buffsize=bs;
+        startpos=sp;
+        f.open(fname, std::ios::in | std::ios::binary);//open the input file
+        if(f.is_open()){
+            open=true;
+            buff=new unsigned char[buffsize];
+            f.seekg(startpos);
+            f.read(reinterpret_cast<char*>(buff), buffsize);
+        }
+    }
+    ~inbuffer(){
+        delete [] buff;
+        f.close();
+    }
+    void next_chunk(){
+        f.read(reinterpret_cast<char*>(buff), buffsize);
+    }
+    void restart(){
+        f.clear();
+        f.seekg(startpos);
+        f.read(reinterpret_cast<char*>(buff), buffsize);
+    }
+    void seekread(uint64_t pos){
+        f.clear();
+        f.seekg(pos);
+        f.read(reinterpret_cast<char*>(buff), buffsize);
+    }
+    void seekread_rel(int64_t relpos){
+        f.clear();
+        f.seekg(relpos, f.cur);
+        f.read(reinterpret_cast<char*>(buff), buffsize);
+    }
+    unsigned char* buff;
+    bool open=false;
+private:
+    std::ifstream f;
+    uint64_t startpos,buffsize;
+
+};
+
 class fileOffset{
 public:
     fileOffset()=delete;//the default constructor should not be used in this version
