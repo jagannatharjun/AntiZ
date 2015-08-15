@@ -132,6 +132,8 @@ inline int getFilesize(std::string fname, uint64_t& fsize);
 void testOffsetList_chunked(std::string fname, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets);
 inline int CheckOffset_chunked(z_stream& strm);
 int inflate_f2f(std::string infile, std::string outfile, uint64_t offset);
+uint64_t compare_buff2f(std::string fname, unsigned char buff[], uint64_t bufflen, uint64_t filepos);
+void findDeflateParams_stream(unsigned char rBuffer[], unsigned char decompBuffer[], streamOffset& streamobj);
 
 void parseCLI(int argc, char* argv[]){
     // Wrap everything in a try block.  Do this every time,
@@ -1001,9 +1003,8 @@ int main(int argc, char* argv[]){
     //take the information created in phase 3 and use it to create an ATZ file
     //currently ATZ1 is in use, no specifications yet, and will be deprecated when ATZ2 comes
     outfile.open(atzfile_name, std::ios::out | std::ios::binary | std::ios::trunc);
-	if (!outfile.is_open()) {
+	if (!outfile.is_open()){
        std::cout << "error: open file for output failed!" << std::endl;
-       pauser();
  	   abort();
 	}
     {//write file header and version
@@ -1059,13 +1060,10 @@ int main(int argc, char* argv[]){
             strm.next_in=rBuffer+streamOffsetList[j].offset;
             //initialize the stream for decompression and check for error
             ret=inflateInit(&strm);
-            if (ret != Z_OK)
-            {
+            if (ret != Z_OK){
                 std::cout<<"inflateInit() failed with exit code:"<<ret<<std::endl;
-                pauser();
                 abort();
-            }
-            //a buffer needs to be created to hold the resulting decompressed data
+            }//a buffer needs to be created to hold the resulting decompressed data
             unsigned char* decompBuffer= new unsigned char[streamOffsetList[j].inflatedLength];
             strm.next_out=decompBuffer;
             strm.avail_out=streamOffsetList[j].inflatedLength;
