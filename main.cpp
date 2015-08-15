@@ -231,6 +231,27 @@ inline bool testParamRange(unsigned char origbuff[], unsigned char decompbuff[],
     return false;
 }
 
+uint64_t compare_buff2f(std::string fname, unsigned char buff[], uint64_t bufflen, uint64_t filepos){
+    inbuffer buffobj(fname, chunksize, filepos);
+    uint64_t i;
+    uint64_t match=0;
+    if (bufflen<=chunksize){
+        for (i=0;i<bufflen;i++){
+            if (buffobj.buff[i]==buff[i]) match++;
+        }
+    }else{
+        uint64_t done=0;
+        while(done<bufflen){
+            for (i=0;i<chunksize;i++){
+                if (buffobj.buff[i]==buff[i]) match++;
+                done++;
+            }
+            buffobj.next_chunk();
+        }
+    }
+    return match;
+}
+
 int inflate_f2f(std::string infile, std::string outfile, uint64_t offset){
     std::ifstream in;
     std::ofstream out;
@@ -923,8 +944,7 @@ int main(int argc, char* argv[]) {
 	if (!infile.is_open()) {
        std::cout<< "error: open file for input failed!" <<std::endl;
  	   return -1;
-	}
-    //setting up read buffer and reading the entire file into the buffer
+	}//setting up read buffer and reading the entire file into the buffer
     rBuffer = new unsigned char[infileSize];
     infile.read(reinterpret_cast<char*>(rBuffer), infileSize);
     infile.close();
