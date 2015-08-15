@@ -125,7 +125,7 @@ void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint
 int parseOffsetType(int header);
 int doInflate(unsigned char* next_in, uint64_t avail_in, unsigned char* next_out, uint64_t avail_out);
 bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], streamOffset& streamobj, uint8_t clevel, uint8_t window, uint8_t memlevel);
-void findDeflateParams_ALL(unsigned char rBuffer[], std::vector<streamOffset>& streamOffsetList);
+void findDeflateParams_ALL(std::vector<streamOffset>& streamOffsetList);
 inline bool testParamRange(unsigned char origbuff[], unsigned char decompbuff[], streamOffset& streamobj, uint8_t clevel_min, uint8_t clevel_max, uint8_t window_min, uint8_t window_max, uint8_t memlevel_min, uint8_t memlevel_max);
 void searchFile(std::string fname, std::vector<fileOffset>& fileoffsets);
 inline int getFilesize(std::string fname, uint64_t& fsize);
@@ -409,7 +409,7 @@ void findDeflateParams_stream(unsigned char rBuffer[], unsigned char decompBuffe
     }
 }
 
-void findDeflateParams_ALL(unsigned char rBuffer[], std::vector<streamOffset>& streamOffsetList){
+void findDeflateParams_ALL(std::vector<streamOffset>& streamOffsetList){
     //this function takes a buffer and a vector containing information about the valid zlib streams in the buffer
     //it tries to find the best parameters for recompression, the results are stored in the vector
     uint64_t i;
@@ -419,11 +419,17 @@ void findDeflateParams_ALL(unsigned char rBuffer[], std::vector<streamOffset>& s
             i=concentrate;
             numOffsets=concentrate;
         }
+        unsigned char* rBuffer=new unsigned char[streamOffsetList[i].streamLength];
+        std::ifstream in;
+        in.open(infile_name, std::ios::in | std::ios::binary);//open the input file
+        in.seekg(streamOffsetList[i].offset);//seek to the beginning of the stream
+        in.read(reinterpret_cast<char*>(rBuffer), streamOffsetList[i].streamLength);
+        in.close();
         //a buffer needs to be created to hold the resulting decompressed data
         //since we have already deompressed the data before, we know exactly how large of a buffer we need to allocate
         //the lengths of the zlib streams have been saved by the previous phase
         unsigned char* decompBuffer= new unsigned char[streamOffsetList[i].inflatedLength];
-        int ret=doInflate((rBuffer+streamOffsetList[i].offset), streamOffsetList[i].streamLength, decompBuffer, streamOffsetList[i].inflatedLength);
+        int ret=doInflate(rBuffer, streamOffsetList[i].streamLength, decompBuffer, streamOffsetList[i].inflatedLength);
         //check the return value
         if (ret==Z_STREAM_END){
             #ifdef debug
@@ -440,10 +446,11 @@ void findDeflateParams_ALL(unsigned char rBuffer[], std::vector<streamOffset>& s
             streamOffsetList[i].recomp=true;
         }
         delete [] decompBuffer;
+        delete [] rBuffer;
     }
 }
 
-bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], streamOffset& streamobj, uint8_t clevel, uint8_t window, uint8_t memlevel){
+bool testDeflateParams(unsigned char origstream[], unsigned char decompbuff[], streamOffset& streamobj, uint8_t clevel, uint8_t window, uint8_t memlevel){
     //tests if the supplied deflate params(clevel, memlevel, window) are better for recompressing the given streamoffset
     //if yes, then update the streamoffset object to the new best values, and if mismatch is within tolerance then return true
     int ret;
@@ -485,7 +492,7 @@ bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], str
         std::cout<<"   shortcut: "<<strm.total_in<<" bytes compressed to "<<strm.total_out<<" bytes"<<std::endl;
         #endif // debug
         for (i=0;i<strm.total_out;i++){
-            if (recompBuffer[i]==origbuff[(i+streamobj.offset)]){
+            if (recompBuffer[i]==origstream[i]){
                 identBytes++;
             }
         }
@@ -518,7 +525,7 @@ bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], str
                 smaller=streamobj.streamLength;
             }
             for (i=0; i<smaller;i++){
-                if (recompBuffer[i]==origbuff[(i+streamobj.offset)]){
+                if (recompBuffer[i]==origstream[i]){
                     identBytes++;
                 }
             }
@@ -542,18 +549,18 @@ bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], str
                 } else {//there are different bytes and/or bytes at the end
                     if (identBytes+mismatchTol>=streamobj.streamLength) fullmatch=true;//if at most mismatchTol bytes diff bail from the loop
                         for (i=0; i<smaller;i++){//diff it
-                            if (recompBuffer[i]!=origbuff[(i+streamobj.offset)]){//if a mismatching byte is found
+                            if (recompBuffer[i]!=origstream[i]){//if a mismatching byte is found
                                 if (streamobj.firstDiffByte<0){//if the first different byte is negative, then this is the first
                                     streamobj.firstDiffByte=(i);
                                     streamobj.diffByteOffsets.push_back(0);
-                                    streamobj.diffByteVal.push_back(origbuff[(i+streamobj.offset)]);
+                                    streamobj.diffByteVal.push_back(origstream[i]);
                                     #ifdef debug
                                     std::cout<<"   first diff byte:"<<i<<std::endl;
                                     #endif // debug
                                     last_i=i;
                                 } else {
                                     streamobj.diffByteOffsets.push_back(i-last_i);
-                                    streamobj.diffByteVal.push_back(origbuff[(i+streamobj.offset)]);
+                                    streamobj.diffByteVal.push_back(origstream[i]);
                                     //cout<<"   different byte:"<<i<<endl;
                                     last_i=i;
                                 }
@@ -566,9 +573,9 @@ bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], str
                                 } else{
                                     streamobj.diffByteOffsets.push_back(1);
                                 }
-                                streamobj.diffByteVal.push_back(origbuff[(i+strm.total_out+streamobj.offset)]);
+                                streamobj.diffByteVal.push_back(origstream[(i+strm.total_out)]);
                                 #ifdef debug
-                                std::cout<<"   byte at the end added :"<<+origbuff[(i+strm.total_out+streamobj.offset)]<<std::endl;
+                                std::cout<<"   byte at the end added :"<<+origstream[(i+strm.total_out)]<<std::endl;
                                 #endif // debug
                             }
                         }
@@ -875,7 +882,7 @@ inline int getFilesize(std::string fname, uint64_t& fsize){
     return 0;
 }
 
-int main(int argc, char* argv[]) {
+int main(int argc, char* argv[]){
 	uint64_t i,j;
 	std::ifstream infile;
 	std::ofstream outfile;
@@ -906,10 +913,8 @@ int main(int argc, char* argv[]) {
     pauser();
     #endif // debug
 
-
     //PHASE 1
     //search the file for zlib headers, count them and create an offset list
-
 	if (getFilesize(infile_name, infileSize)!=0) return -1;//if opening the file fails, exit
 	std::cout<<"Input file size:"<<infileSize<<std::endl;
     //try to guess the number of potential zlib headers in the file from the file size
@@ -935,29 +940,10 @@ int main(int argc, char* argv[]) {
     pauser();
     #endif // debug
 
-
-
-    //THIS IS A HACK TO MAKE SURE THE OLD CODE WORKS
-    //
-    //open the input file and check for error
-	infile.open(infile_name, std::ios::in | std::ios::binary);
-	if (!infile.is_open()) {
-       std::cout<< "error: open file for input failed!" <<std::endl;
- 	   return -1;
-	}//setting up read buffer and reading the entire file into the buffer
-    rBuffer = new unsigned char[infileSize];
-    infile.read(reinterpret_cast<char*>(rBuffer), infileSize);
-    infile.close();
-    //END OF HACK
-
-
-
     //PHASE 3
     //start trying to find the parameters to use for recompression
-
-    findDeflateParams_ALL(rBuffer, streamOffsetList);
+    findDeflateParams_ALL(streamOffsetList);
     std::cout<<std::endl;
-
     #ifdef debug
     for (j=0; j<streamOffsetList.size(); j++){
         if (((streamOffsetList[j].streamLength-streamOffsetList[j].identBytes)<=mismatchTol)&&(streamOffsetList[j].identBytes>0)) numFullmatch++;
@@ -983,7 +969,6 @@ int main(int argc, char* argv[]) {
         std::cout<<std::endl;
     }
     #endif // debug
-
     for (j=0; j<streamOffsetList.size(); j++){
         if (((streamOffsetList[j].streamLength-streamOffsetList[j].identBytes)<=recompTresh)&&(streamOffsetList[j].identBytes>0)){
             recomp++;
@@ -991,10 +976,26 @@ int main(int argc, char* argv[]) {
         //inflate_f2f(infile_name, ("temp"+std::to_string(j)), streamOffsetList[j].offset);
     }
     std::cout<<"recompressed:"<<recomp<<"/"<<streamOffsetList.size()<<std::endl;
-
     #ifdef debug
     pauser();
     #endif // debug
+
+
+
+    //THIS IS A HACK TO MAKE SURE THE OLD CODE WORKS
+    //
+    //open the input file and check for error
+	infile.open(infile_name, std::ios::in | std::ios::binary);
+	if (!infile.is_open()) {
+       std::cout<< "error: open file for input failed!" <<std::endl;
+ 	   return -1;
+	}//setting up read buffer and reading the entire file into the buffer
+    rBuffer = new unsigned char[infileSize];
+    infile.read(reinterpret_cast<char*>(rBuffer), infileSize);
+    infile.close();
+    //END OF HACK
+
+
 
     //PHASE 4
     //take the information created in phase 3 and use it to create an ATZ file
