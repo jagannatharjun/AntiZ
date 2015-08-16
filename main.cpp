@@ -1052,24 +1052,6 @@ int main(int argc, char* argv[]){
             delete [] readBuffer;
         }
     }
-
-
-
-    //THIS IS A HACK TO MAKE SURE THE OLD CODE WORKS
-    //
-    //open the input file and check for error
-	infile.open(infile_name, std::ios::in | std::ios::binary);
-	if (!infile.is_open()) {
-       std::cout<< "error: open file for input failed!" <<std::endl;
- 	   return -1;
-	}//setting up read buffer and reading the entire file into the buffer
-    rBuffer = new unsigned char[infileSize];
-    infile.read(reinterpret_cast<char*>(rBuffer), infileSize);
-    infile.close();
-    //END OF HACK
-
-
-
     for(j=0;j<streamOffsetList.size();j++){//write the gaps before streams and non-recompressed streams to disk as the residue
         if ((lastos+lastlen)!=streamOffsetList[j].offset){//there is a gap before the stream, copy the gap
             copyto(outfile, infile_name, (streamOffsetList[j].offset-(lastos+lastlen)), (lastos+lastlen));
@@ -1094,7 +1076,6 @@ int main(int argc, char* argv[]){
     streamOffsetList.clear();
     streamOffsetList.shrink_to_fit();
     outfile.close();
-    delete [] rBuffer;
 
     PHASE5:
     //PHASE 5: verify that we can reconstruct the original file, using only data from the ATZ file
