@@ -1056,15 +1056,11 @@ int main(int argc, char* argv[]){
 
 
     for(j=0;j<streamOffsetList.size();j++){//write the gaps before streams and non-recompressed streams to disk as the residue
-        if ((lastos+lastlen)==streamOffsetList[j].offset){//there is no gap before the stream
-            if (streamOffsetList[j].recomp==false){//the stream is not recompressed, so copy it
-                outfile.write(reinterpret_cast<char*>(rBuffer+streamOffsetList[j].offset), streamOffsetList[j].streamLength);
-            }
-        }else{//there is a gap before the stream, copy the gap
+        if ((lastos+lastlen)!=streamOffsetList[j].offset){//there is a gap before the stream, copy the gap
             outfile.write(reinterpret_cast<char*>(rBuffer+lastos+lastlen), (streamOffsetList[j].offset-(lastos+lastlen)));
-            if (streamOffsetList[j].recomp==false){//the stream is not recompressed, so copy it
-                outfile.write(reinterpret_cast<char*>(rBuffer+streamOffsetList[j].offset), streamOffsetList[j].streamLength);
-            }
+        }
+        if (streamOffsetList[j].recomp==false){//if the stream is not recompressed copy it
+            outfile.write(reinterpret_cast<char*>(rBuffer+streamOffsetList[j].offset), streamOffsetList[j].streamLength);
         }
         lastos=streamOffsetList[j].offset;
         lastlen=streamOffsetList[j].streamLength;
