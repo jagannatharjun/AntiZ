@@ -1056,25 +1056,13 @@ int main(int argc, char* argv[]){
 
 
     for(j=0;j<streamOffsetList.size();j++){//write the gaps before streams and non-recompressed streams to disk as the residue
-        if ((lastos+lastlen)==streamOffsetList[j].offset){
-            #ifdef debug
-            std::cout<<"no gap before stream #"<<j<<std::endl;
-            #endif // debug
-            if (streamOffsetList[j].recomp==false){
-                #ifdef debug
-                std::cout<<"copying stream #"<<j<<std::endl;
-                #endif // debug
+        if ((lastos+lastlen)==streamOffsetList[j].offset){//there is no gap before the stream
+            if (streamOffsetList[j].recomp==false){//the stream is not recompressed, so copy it
                 outfile.write(reinterpret_cast<char*>(rBuffer+streamOffsetList[j].offset), streamOffsetList[j].streamLength);
             }
-        }else{
-            #ifdef debug
-            std::cout<<"gap of "<<(streamOffsetList[j].offset-(lastos+lastlen))<<" bytes before stream #"<<j<<std::endl;
-            #endif // debug
+        }else{//there is a gap before the stream, copy the gap
             outfile.write(reinterpret_cast<char*>(rBuffer+lastos+lastlen), (streamOffsetList[j].offset-(lastos+lastlen)));
-            if (streamOffsetList[j].recomp==false){
-                #ifdef debug
-                std::cout<<"copying stream #"<<j<<std::endl;
-                #endif // debug
+            if (streamOffsetList[j].recomp==false){//the stream is not recompressed, so copy it
                 outfile.write(reinterpret_cast<char*>(rBuffer+streamOffsetList[j].offset), streamOffsetList[j].streamLength);
             }
         }
