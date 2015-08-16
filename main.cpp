@@ -892,6 +892,25 @@ inline void writeNumber8(std::ofstream &outfile, uint64_t number) {
     outfile.write(reinterpret_cast<char*>(&number), 8);
 }
 
+inline void read2buff(std::string fname, unsigned char buff[], uint64_t bufflen, uint64_t offset){
+    std::ifstream infile;
+    infile.open(fname, std::ios::in | std::ios::binary);
+    infile.seekg(offset);
+    infile.read(reinterpret_cast<char*>(buff), bufflen);
+    infile.close();
+}
+
+void copyto(std::ofstream& outfile, std::string ifname, uint64_t length, uint64_t offset){
+    std::ifstream infile;
+    unsigned char* buff=new unsigned char[length];
+    infile.open(ifname, std::ios::in | std::ios::binary);
+    infile.seekg(offset);
+    infile.read(reinterpret_cast<char*>(buff), length);
+    infile.close();
+    outfile.write(reinterpret_cast<char*>(buff), length);
+    delete [] buff;
+}
+
 int main(int argc, char* argv[]){
 	uint64_t i,j;
 	std::ifstream infile;
@@ -983,7 +1002,6 @@ int main(int argc, char* argv[]){
         if (((streamOffsetList[j].streamLength-streamOffsetList[j].identBytes)<=recompTresh)&&(streamOffsetList[j].identBytes>0)){
             recomp++;
         }
-        //inflate_f2f(infile_name, ("temp"+std::to_string(j)), streamOffsetList[j].offset);
     }
     std::cout<<"recompressed:"<<recomp<<"/"<<streamOffsetList.size()<<std::endl;
     #ifdef debug
@@ -1027,10 +1045,7 @@ int main(int argc, char* argv[]){
             }
             unsigned char* decompBuffer= new unsigned char[streamOffsetList[j].inflatedLength];
             unsigned char* readBuffer= new unsigned char[streamOffsetList[j].streamLength];
-            infile.open(infile_name, std::ios::in | std::ios::binary);
-            infile.seekg(streamOffsetList[j].offset);
-            infile.read(reinterpret_cast<char*>(readBuffer), streamOffsetList[j].streamLength);
-            infile.close();
+            read2buff(infile_name, readBuffer, streamOffsetList[j].streamLength, streamOffsetList[j].offset);
             doInflate(readBuffer, streamOffsetList[j].streamLength, decompBuffer, streamOffsetList[j].inflatedLength);
             outfile.write(reinterpret_cast<char*>(decompBuffer), streamOffsetList[j].inflatedLength);
             delete [] decompBuffer;
@@ -1057,19 +1072,16 @@ int main(int argc, char* argv[]){
 
     for(j=0;j<streamOffsetList.size();j++){//write the gaps before streams and non-recompressed streams to disk as the residue
         if ((lastos+lastlen)!=streamOffsetList[j].offset){//there is a gap before the stream, copy the gap
-            outfile.write(reinterpret_cast<char*>(rBuffer+lastos+lastlen), (streamOffsetList[j].offset-(lastos+lastlen)));
+            copyto(outfile, infile_name, (streamOffsetList[j].offset-(lastos+lastlen)), (lastos+lastlen));
         }
         if (streamOffsetList[j].recomp==false){//if the stream is not recompressed copy it
-            outfile.write(reinterpret_cast<char*>(rBuffer+streamOffsetList[j].offset), streamOffsetList[j].streamLength);
+            copyto(outfile, infile_name, streamOffsetList[j].streamLength, streamOffsetList[j].offset);
         }
         lastos=streamOffsetList[j].offset;
         lastlen=streamOffsetList[j].streamLength;
     }
     if((lastos+lastlen)<infileSize){//if there is stuff after the last stream, write that to disk too
-        #ifdef debug
-        std::cout<<(infileSize-(lastos+lastlen))<<" bytes copied from the end of the file"<<std::endl;
-        #endif // debug
-        outfile.write(reinterpret_cast<char*>(rBuffer+lastos+lastlen), (infileSize-(lastos+lastlen)));
+        copyto(outfile, infile_name, (infileSize-(lastos+lastlen)), (lastos+lastlen));
     }
 
     atzlen=outfile.tellp();
