@@ -117,25 +117,25 @@ public:
 };
 
 inline void pauser();
-void parseCLI(int argc, char* argv[], std::string&);
-void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint64_t buffLen, uint64_t chunkOffset);
+void parseCLI(int, char* [], std::string&);
+void searchBuffer(unsigned char [], std::vector<fileOffset>&, uint64_t, uint64_t);
 //bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, uint64_t& total_out);
 //void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets);
-int parseOffsetType(int header);
-int doInflate(unsigned char* next_in, uint64_t avail_in, unsigned char* next_out, uint64_t avail_out);
-bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], streamOffset& streamobj, uint8_t clevel, uint8_t window, uint8_t memlevel);
-void findDeflateParams_ALL(std::vector<streamOffset>& streamOffsetList, std::string);
-inline bool testParamRange(unsigned char origbuff[], unsigned char decompbuff[], streamOffset& streamobj, uint8_t clevel_min, uint8_t clevel_max, uint8_t window_min, uint8_t window_max, uint8_t memlevel_min, uint8_t memlevel_max);
-void searchFile(std::string fname, std::vector<fileOffset>& fileoffsets);
-inline int getFilesize(std::string fname, uint64_t& fsize);
-void testOffsetList_chunked(std::string fname, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets);
-inline int CheckOffset_chunked(z_stream& strm);
-int inflate_f2f(std::string infile, std::string outfile, uint64_t offset);
-uint64_t compare_buff2f(std::string fname, unsigned char buff[], uint64_t bufflen, uint64_t filepos);
-void findDeflateParams_stream(unsigned char rBuffer[], unsigned char decompBuffer[], streamOffset& streamobj);
-void copyto(std::ofstream& outfile, std::string ifname, uint64_t length, uint64_t offset);
-void writeATZfile(std::string ifname, std::string ofname, std::vector<streamOffset>& streamOffsetList);
-void writeStreamdesc(std::ofstream& outfile, std::string ifname, streamOffset& streamobj);
+int parseOffsetType(int);
+int doInflate(unsigned char*, uint64_t, unsigned char*, uint64_t);
+bool testDeflateParams(unsigned char [], unsigned char [], streamOffset&, uint8_t, uint8_t, uint8_t);
+void findDeflateParams_ALL(std::vector<streamOffset>&, std::string);
+inline bool testParamRange(unsigned char [], unsigned char [], streamOffset&, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t);
+void searchFile(std::string, std::vector<fileOffset>&);
+inline int getFilesize(std::string, uint64_t&);
+void testOffsetList_chunked(std::string, std::vector<fileOffset>&, std::vector<streamOffset>&);
+inline int CheckOffset_chunked(z_stream&);
+int inflate_f2f(std::string, std::string, uint64_t);
+uint64_t compare_buff2f(std::string, unsigned char [], uint64_t, uint64_t);
+void findDeflateParams_stream(unsigned char [], unsigned char [], streamOffset&);
+void copyto(std::ofstream&, std::string, uint64_t, uint64_t);
+void writeATZfile(std::string, std::string, std::vector<streamOffset>&);
+void writeStreamdesc(std::ofstream&, std::string, streamOffset&);
 
 void parseCLI(int argc, char* argv[], std::string& infile_name){
     // Wrap everything in a try block.  Do this every time,
