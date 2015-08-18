@@ -16,9 +16,7 @@ uint64_t chunksize=16*1024;
 bool shortcutEnabled=true;//enable speedup shortcut in phase 3
 int_fast64_t concentrate=-1;//only try to recompress the stream# givel here, negative values disable this and run on all streams, debug tool
 
-//filenames and command line switches
-std::string reconfile_name;
-std::string atzfile_name;
+//command line switches
 bool recon;
 bool notest;
 
@@ -117,7 +115,7 @@ public:
 };
 
 inline void pauser();
-void parseCLI(int, char* [], std::string&);
+void parseCLI(int, char* [], std::string&, std::string&, std::string&);
 void searchBuffer(unsigned char [], std::vector<fileOffset>&, uint64_t, uint64_t);
 //bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, uint64_t& total_out);
 //void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets);
@@ -137,7 +135,7 @@ void copyto(std::ofstream&, std::string, uint64_t, uint64_t);
 void writeATZfile(std::string, std::string, std::vector<streamOffset>&);
 void writeStreamdesc(std::ofstream&, std::string, streamOffset&);
 
-void parseCLI(int argc, char* argv[], std::string& infile_name){
+void parseCLI(int argc, char* argv[], std::string& infile_name, std::string& atzfile_name, std::string& reconfile_name){
     // Wrap everything in a try block.  Do this every time,
 	// because exceptions will be thrown for problems.
 	try{
@@ -996,6 +994,8 @@ int main(int argc, char* argv[]){
 	std::ifstream infile;
 	std::ofstream outfile;
 	std::string infile_name;
+	std::string atzfile_name;
+	std::string reconfile_name;
 	std::vector<fileOffset> offsetList;//offsetList stores memory offsets where potential headers can be found, and the type of the offset
 	std::vector<streamOffset> streamOffsetList;//streamOffsetList stores offsets of confirmed zlib streams and a bunch of data on them
 	z_stream strm;
@@ -1015,7 +1015,7 @@ int main(int argc, char* argv[]){
 	infile_name.clear();
 	reconfile_name.clear();
 	atzfile_name.clear();
-	parseCLI(argc, argv, infile_name);//parse CLI arguments and if needed jump to reconstruction
+	parseCLI(argc, argv, infile_name, atzfile_name, reconfile_name);//parse CLI arguments and if needed jump to reconstruction
     if (recon) goto PHASE5;
     #ifdef debug
     pauser();
