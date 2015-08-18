@@ -134,6 +134,7 @@ void findDeflateParams_stream(unsigned char [], unsigned char [], streamOffset&)
 void copyto(std::ofstream&, std::string, uint64_t, uint64_t);
 void writeATZfile(std::string, std::string, std::vector<streamOffset>&);
 void writeStreamdesc(std::ofstream&, std::string, streamOffset&);
+int parseATZheader(std::string, uint64_t&, uint64_t&);
 
 void parseCLI(int argc, char* argv[], std::string& infile_name, std::string& atzfile_name, std::string& reconfile_name){
     // Wrap everything in a try block.  Do this every time,
@@ -988,6 +989,37 @@ void writeATZfile(std::string ifname, std::string ofname, std::vector<streamOffs
     writeNumber8(outfile, atzlen);
 }
 
+inline void readNumber8(std::ifstream& infile, uint64_t& num){
+    unsigned char buff[8];
+    infile.read(reinterpret_cast<char*>(buff), 8);
+    memcpy(&num, buff, 8);
+}
+
+int parseATZheader(std::string atzfile_name, uint64_t& origlen, uint64_t& nstrms){
+    uint64_t infileSize=0;
+    if (getFilesize(atzfile_name, infileSize)!=0) return -1;
+    std::ifstream atzfile(atzfile_name, std::ios::in | std::ios::binary);
+	std::cout<<"reconstructing from "<<atzfile_name<<std::endl;
+	std::cout<<"ATZ file size: "<<infileSize<<std::endl;
+    //setting up read buffer and reading the entire file into the buffer
+    unsigned char atzbuf[4];
+    atzfile.read(reinterpret_cast<char*>(atzbuf), 4);
+    if (atzbuf[0] != 'A' || atzbuf[1] != 'T' || atzbuf[2] != 'Z' || atzbuf[3] != '\1') {
+        std::cout<<"Invalid file: ATZ1 header not found"<<std::endl;
+        return -2;
+    }
+    uint64_t atzlen;
+    readNumber8(atzfile, atzlen);
+    if (atzlen!=infileSize){
+        std::cout<<"Invalid file: ATZ file size mismatch"<<std::endl;
+        return -3;
+    }
+    readNumber8(atzfile, origlen);
+    readNumber8(atzfile, nstrms);
+    atzfile.close();
+    return 0;
+}
+
 int main(int argc, char* argv[]){
 	uint64_t i,j;
 	uint64_t infileSize;
@@ -1003,7 +1035,6 @@ int main(int argc, char* argv[]){
 
 	uint64_t lastos=0;
     uint64_t lastlen=0;
-    uint64_t atzlen=0;//placeholder for the length of the atz file
     int ret=-9;
     #ifdef debug
     uint64_t numFullmatch=0;
@@ -1096,38 +1127,25 @@ int main(int argc, char* argv[]){
     PHASE5:
     if (!notest){//dont reconstruct if we wont test it
     infileSize=0;
-    atzlen=0;
     lastos=28;
     uint64_t origlen=0;
     uint64_t nstrms=0;
 
+    if (parseATZheader(atzfile_name, origlen, nstrms)!=0) return -1;
+
+
+
+    //HACK TO MAKE OLD CODE WORK
     getFilesize(atzfile_name, infileSize);
-    std::ifstream atzfile(atzfile_name, std::ios::in | std::ios::binary);
-	if (!atzfile.is_open()) {
-       std::cout << "error: open ATZ file for input failed!" << std::endl;
-       return -1;
-	}
-	std::cout<<"reconstructing from "<<atzfile_name<<std::endl;
-	std::cout<<"ATZ file size: "<<infileSize<<std::endl;
-    //setting up read buffer and reading the entire file into the buffer
+    std::ifstream atzfile;
+    atzfile.open(atzfile_name, std::ios::in | std::ios::binary);
     unsigned char* atzBuffer = new unsigned char[infileSize];
     atzfile.read(reinterpret_cast<char*>(atzBuffer), infileSize);
     atzfile.close();
+    ////////////////////////////
 
-    if (atzBuffer[0] != 'A' || atzBuffer[1] != 'T' || atzBuffer[2] != 'Z' || atzBuffer[3] != '\1') {
-        std::cout<<"Invalid file: ATZ1 header not found"<<std::endl;
-        return -1;
-    }
-    atzlen=*reinterpret_cast<uint64_t*>(&atzBuffer[4]);
-    if (atzlen!=infileSize){
-        std::cout<<"Invalid file: ATZ file size mismatch"<<std::endl;
-        abort();
-    }
-    origlen=*reinterpret_cast<uint64_t*>(&atzBuffer[12]);
-    nstrms=*reinterpret_cast<uint64_t*>(&atzBuffer[20]);
-    #ifdef debug
-    std::cout<<"nstrms:"<<nstrms<<std::endl;
-    #endif // debug
+
+
     if (nstrms>0){
         streamOffsetList.reserve(nstrms);
         //reead in all the info about the streams
