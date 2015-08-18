@@ -17,7 +17,6 @@ bool shortcutEnabled=true;//enable speedup shortcut in phase 3
 int_fast64_t concentrate=-1;//only try to recompress the stream# givel here, negative values disable this and run on all streams, debug tool
 
 //filenames and command line switches
-std::string infile_name;
 std::string reconfile_name;
 std::string atzfile_name;
 bool recon;
@@ -118,14 +117,14 @@ public:
 };
 
 inline void pauser();
-void parseCLI(int argc, char* argv[]);
+void parseCLI(int argc, char* argv[], std::string&);
 void searchBuffer(unsigned char buffer[], std::vector<fileOffset>& offsets, uint64_t buffLen, uint64_t chunkOffset);
 //bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, uint64_t& total_out);
 //void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets);
 int parseOffsetType(int header);
 int doInflate(unsigned char* next_in, uint64_t avail_in, unsigned char* next_out, uint64_t avail_out);
 bool testDeflateParams(unsigned char origbuff[], unsigned char decompbuff[], streamOffset& streamobj, uint8_t clevel, uint8_t window, uint8_t memlevel);
-void findDeflateParams_ALL(std::vector<streamOffset>& streamOffsetList);
+void findDeflateParams_ALL(std::vector<streamOffset>& streamOffsetList, std::string);
 inline bool testParamRange(unsigned char origbuff[], unsigned char decompbuff[], streamOffset& streamobj, uint8_t clevel_min, uint8_t clevel_max, uint8_t window_min, uint8_t window_max, uint8_t memlevel_min, uint8_t memlevel_max);
 void searchFile(std::string fname, std::vector<fileOffset>& fileoffsets);
 inline int getFilesize(std::string fname, uint64_t& fsize);
@@ -138,7 +137,7 @@ void copyto(std::ofstream& outfile, std::string ifname, uint64_t length, uint64_
 void writeATZfile(std::string ifname, std::string ofname, std::vector<streamOffset>& streamOffsetList);
 void writeStreamdesc(std::ofstream& outfile, std::string ifname, streamOffset& streamobj);
 
-void parseCLI(int argc, char* argv[]){
+void parseCLI(int argc, char* argv[], std::string& infile_name){
     // Wrap everything in a try block.  Do this every time,
 	// because exceptions will be thrown for problems.
 	try{
@@ -414,7 +413,7 @@ void findDeflateParams_stream(unsigned char rBuffer[], unsigned char decompBuffe
     }
 }
 
-void findDeflateParams_ALL(std::vector<streamOffset>& streamOffsetList){
+void findDeflateParams_ALL(std::vector<streamOffset>& streamOffsetList, std::string infile_name){
     //this function takes a buffer and a vector containing information about the valid zlib streams in the buffer
     //it tries to find the best parameters for recompression, the results are stored in the vector
     uint64_t i;
@@ -969,21 +968,21 @@ void writeATZfile(std::string ifname, std::string ofname, std::vector<streamOffs
 
     for(i=0;i<streamOffsetList.size();i++){//write recompressed stream descriptions
         if (streamOffsetList[i].recomp==true){//we are operating on the j-th stream
-            writeStreamdesc(outfile, infile_name, streamOffsetList[i]);
+            writeStreamdesc(outfile, ifname, streamOffsetList[i]);
         }
     }
     for(i=0;i<streamOffsetList.size();i++){//write the gaps before streams and non-recompressed streams to disk as the residue
         if ((lastos+lastlen)!=streamOffsetList[i].offset){//there is a gap before the stream, copy the gap
-            copyto(outfile, infile_name, (streamOffsetList[i].offset-(lastos+lastlen)), (lastos+lastlen));
+            copyto(outfile, ifname, (streamOffsetList[i].offset-(lastos+lastlen)), (lastos+lastlen));
         }
         if (streamOffsetList[i].recomp==false){//if the stream is not recompressed copy it
-            copyto(outfile, infile_name, streamOffsetList[i].streamLength, streamOffsetList[i].offset);
+            copyto(outfile, ifname, streamOffsetList[i].streamLength, streamOffsetList[i].offset);
         }
         lastos=streamOffsetList[i].offset;
         lastlen=streamOffsetList[i].streamLength;
     }
     if((lastos+lastlen)<infileSize){//if there is stuff after the last stream, write that to disk too
-        copyto(outfile, infile_name, (infileSize-(lastos+lastlen)), (lastos+lastlen));
+        copyto(outfile, ifname, (infileSize-(lastos+lastlen)), (lastos+lastlen));
     }
     atzlen=outfile.tellp();
     std::cout<<"Total bytes written: "<<atzlen<<std::endl;
@@ -993,9 +992,10 @@ void writeATZfile(std::string ifname, std::string ofname, std::vector<streamOffs
 
 int main(int argc, char* argv[]){
 	uint64_t i,j;
+	uint64_t infileSize;
 	std::ifstream infile;
 	std::ofstream outfile;
-	uint64_t infileSize;
+	std::string infile_name;
 	std::vector<fileOffset> offsetList;//offsetList stores memory offsets where potential headers can be found, and the type of the offset
 	std::vector<streamOffset> streamOffsetList;//streamOffsetList stores offsets of confirmed zlib streams and a bunch of data on them
 	z_stream strm;
@@ -1015,7 +1015,7 @@ int main(int argc, char* argv[]){
 	infile_name.clear();
 	reconfile_name.clear();
 	atzfile_name.clear();
-	parseCLI(argc, argv);//parse CLI arguments and if needed jump to reconstruction
+	parseCLI(argc, argv, infile_name);//parse CLI arguments and if needed jump to reconstruction
     if (recon) goto PHASE5;
     #ifdef debug
     pauser();
@@ -1050,7 +1050,7 @@ int main(int argc, char* argv[]){
 
     //PHASE 3
     //start trying to find the parameters to use for recompression
-    findDeflateParams_ALL(streamOffsetList);
+    findDeflateParams_ALL(streamOffsetList, infile_name);
     std::cout<<std::endl;
     #ifdef debug
     for (j=0; j<streamOffsetList.size(); j++){
