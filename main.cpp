@@ -1086,14 +1086,14 @@ int main(int argc, char* argv[]){
     //take the information created in phase 3 and use it to create an ATZ file
     //currently ATZ1 is in use, no specifications yet, and will be deprecated when ATZ2 comes
     writeATZfile(infile_name, atzfile_name, streamOffsetList);
+    streamOffsetList.clear();
+    streamOffsetList.shrink_to_fit();
     #ifdef debug
     pauser();
     #endif // debug
-    streamOffsetList.clear();
-    streamOffsetList.shrink_to_fit();
 
-    PHASE5:
     //PHASE 5: verify that we can reconstruct the original file, using only data from the ATZ file
+    PHASE5:
     if (!notest){//dont reconstruct if we wont test it
     infileSize=0;
     atzlen=0;
@@ -1101,31 +1101,26 @@ int main(int argc, char* argv[]){
     uint64_t origlen=0;
     uint64_t nstrms=0;
 
+    getFilesize(atzfile_name, infileSize);
     std::ifstream atzfile(atzfile_name, std::ios::in | std::ios::binary);
 	if (!atzfile.is_open()) {
        std::cout << "error: open ATZ file for input failed!" << std::endl;
-       pauser();
- 	   abort();
+       return -1;
 	}
 	std::cout<<"reconstructing from "<<atzfile_name<<std::endl;
-    atzfile.seekg (0, atzfile.end);
-	infileSize=atzfile.tellg();
-	atzfile.seekg (0, atzfile.beg);
-	std::cout<<"Input size:"<<infileSize<<std::endl;
+	std::cout<<"ATZ file size: "<<infileSize<<std::endl;
     //setting up read buffer and reading the entire file into the buffer
     unsigned char* atzBuffer = new unsigned char[infileSize];
     atzfile.read(reinterpret_cast<char*>(atzBuffer), infileSize);
     atzfile.close();
 
-    if ((atzBuffer[0]!=65)||(atzBuffer[1]!=84)||(atzBuffer[2]!=90)||(atzBuffer[3]!=1)){
-        std::cout<<"ATZ1 header not found"<<std::endl;
-        pauser();
-        abort();
+    if (atzBuffer[0] != 'A' || atzBuffer[1] != 'T' || atzBuffer[2] != 'Z' || atzBuffer[3] != '\1') {
+        std::cout<<"Invalid file: ATZ1 header not found"<<std::endl;
+        return -1;
     }
     atzlen=*reinterpret_cast<uint64_t*>(&atzBuffer[4]);
     if (atzlen!=infileSize){
-        std::cout<<"atzlen mismatch"<<std::endl;
-        pauser();
+        std::cout<<"Invalid file: ATZ file size mismatch"<<std::endl;
         abort();
     }
     origlen=*reinterpret_cast<uint64_t*>(&atzBuffer[12]);
