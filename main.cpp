@@ -135,6 +135,7 @@ void copyto(std::ofstream&, std::string, uint64_t, uint64_t);
 void writeATZfile(std::string, std::string, std::vector<streamOffset>&);
 void writeStreamdesc(std::ofstream&, std::string, streamOffset&);
 int parseATZheader(std::string, uint64_t&, uint64_t&);
+void printStreaminfo_ALL(std::vector<streamOffset>&);
 
 void parseCLI(int argc, char* argv[], std::string& infile_name, std::string& atzfile_name, std::string& reconfile_name){
     // Wrap everything in a try block.  Do this every time,
@@ -989,10 +990,28 @@ void writeATZfile(std::string ifname, std::string ofname, std::vector<streamOffs
     writeNumber8(outfile, atzlen);
 }
 
-inline void readNumber8(std::ifstream& infile, uint64_t& num){
+inline uint64_t readNumber8(std::ifstream& infile){
     unsigned char buff[8];
     infile.read(reinterpret_cast<char*>(buff), 8);
-    memcpy(&num, buff, 8);
+    uint64_t output;
+    memcpy(&output, buff, 8);
+    return output;
+}
+
+inline uint64_t readNumber8(std::ifstream& infile, uint64_t pos){
+    unsigned char buff[8];
+    infile.seekg(pos);
+    infile.read(reinterpret_cast<char*>(buff), 8);
+    uint64_t output;
+    memcpy(&output, buff, 8);
+    return output;
+}
+
+inline uint8_t readNumber1(std::ifstream& infile, uint64_t pos){
+    uint8_t output;
+    infile.seekg(pos);
+    infile.read(reinterpret_cast<char*>(&output), 1);
+    return output;
 }
 
 int parseATZheader(std::string atzfile_name, uint64_t& origlen, uint64_t& nstrms){
@@ -1008,88 +1027,18 @@ int parseATZheader(std::string atzfile_name, uint64_t& origlen, uint64_t& nstrms
         std::cout<<"Invalid file: ATZ1 header not found"<<std::endl;
         return -2;
     }
-    uint64_t atzlen;
-    readNumber8(atzfile, atzlen);
-    if (atzlen!=infileSize){
+    if ((readNumber8(atzfile))!=infileSize){
         std::cout<<"Invalid file: ATZ file size mismatch"<<std::endl;
         return -3;
     }
-    readNumber8(atzfile, origlen);
-    readNumber8(atzfile, nstrms);
+    origlen=readNumber8(atzfile);
+    nstrms=readNumber8(atzfile);
     atzfile.close();
     return 0;
 }
 
-int main(int argc, char* argv[]){
-	uint64_t i,j;
-	uint64_t infileSize;
-	std::ifstream infile;
-	std::ofstream outfile;
-	std::string infile_name;
-	std::string atzfile_name;
-	std::string reconfile_name;
-	std::vector<fileOffset> offsetList;//offsetList stores memory offsets where potential headers can be found, and the type of the offset
-	std::vector<streamOffset> streamOffsetList;//streamOffsetList stores offsets of confirmed zlib streams and a bunch of data on them
-	z_stream strm;
-	unsigned char* rBuffer;
-
-	uint64_t lastos=0;
-    uint64_t lastlen=0;
-    int ret=-9;
-    #ifdef debug
-    uint64_t numFullmatch=0;
-    #endif // debug
-
-	//PHASE 0
-    //parse CLI arguments, make sure the file name stings do not hold any uninitialized data
-    std::cout<<"AntiZ 0.1.4-git"<<std::endl;
-	infile_name.clear();
-	reconfile_name.clear();
-	atzfile_name.clear();
-	parseCLI(argc, argv, infile_name, atzfile_name, reconfile_name);//parse CLI arguments and if needed jump to reconstruction
-    if (recon) goto PHASE5;
-    #ifdef debug
-    pauser();
-    #endif // debug
-
-    //PHASE 1
-    //search the file for zlib headers, count them and create an offset list
-	if (getFilesize(infile_name, infileSize)!=0) return -1;//if opening the file fails, exit
-	std::cout<<"Input file size:"<<infileSize<<std::endl;
-    //try to guess the number of potential zlib headers in the file from the file size
-    //this value is purely empirical, may need tweaking
-	offsetList.reserve(static_cast<uint64_t>(infileSize/1912));
-	#ifdef debug
-	std::cout<<"Offset list initial capacity:"<<offsetList.capacity()<<std::endl;
-	#endif
-	searchFile(infile_name, offsetList);//search the file for zlib headers
-	std::cout<<"Total zlib headers found: "<<offsetList.size()<<std::endl;
-	#ifdef debug
-	pauser();
-	#endif // debug
-
-    //PHASE 2
-    //start trying to decompress at the collected offsets
-    //test all offsets found in phase 1
-    testOffsetList_chunked(infile_name, offsetList, streamOffsetList);
-    std::cout<<"Valid zlib streams: "<<streamOffsetList.size()<<std::endl;
-    offsetList.clear();//we only need the good offsets
-    offsetList.shrink_to_fit();
-    #ifdef debug
-    pauser();
-    #endif // debug
-
-    //PHASE 3
-    //start trying to find the parameters to use for recompression
-    findDeflateParams_ALL(streamOffsetList, infile_name);
-    std::cout<<std::endl;
-    #ifdef debug
-    for (j=0; j<streamOffsetList.size(); j++){
-        if (((streamOffsetList[j].streamLength-streamOffsetList[j].identBytes)<=mismatchTol)&&(streamOffsetList[j].identBytes>0)) numFullmatch++;
-    }
-    std::cout<<"fullmatch streams:"<<numFullmatch<<" out of "<<streamOffsetList.size()<<std::endl;
-    std::cout<<std::endl;
-    pauser();
+void printStreaminfo_ALL(std::vector<streamOffset>& streamOffsetList){
+    uint64_t i,j, numFullmatch=0;
     std::cout<<"Stream info"<<std::endl;
     for (j=0; j<streamOffsetList.size(); j++){
         std::cout<<"-------------------------"<<std::endl;
@@ -1107,10 +1056,112 @@ int main(int argc, char* argv[]){
         }
         std::cout<<std::endl;
     }
+    std::cout<<"-------------------------"<<std::endl;
+    for (j=0; j<streamOffsetList.size(); j++){
+        if (((streamOffsetList[j].streamLength-streamOffsetList[j].identBytes)<=mismatchTol)&&(streamOffsetList[j].identBytes>0)) numFullmatch++;
+    }
+    std::cout<<"fullmatch streams:"<<numFullmatch<<" out of "<<streamOffsetList.size()<<std::endl;
+}
+
+/*void readStreamdesc_ALL(std::string atzfile_name, std::vector<streamOffset>& streamOffsetList, uint64_t nstrms){
+    uint64_t i,j;
+    uint64_t lastos=28;
+    std::ifstream atzfile(atzfile_name, std::ios::in | std::ios::binary);
+    for (j=0;j<nstrms;j++){
+        #ifdef debug
+        std::cout<<"stream #"<<j<<std::endl;
+        #endif // debug
+        streamOffsetList.push_back(streamOffset(readNumber8(atzfile, lastos), -1, readNumber8(atzfile, lastos+8), readNumber8(atzfile, lastos+16)));
+        streamOffsetList[j].clevel=readNumber1(atzfile, lastos+24);
+        streamOffsetList[j].window=readNumber1(atzfile, lastos+25);
+        streamOffsetList[j].memlvl=readNumber1(atzfile, lastos+26);
+        //partial match handling
+        uint64_t diffbytes=readNumber8(atzfile, lastos+27);
+        if (diffbytes>0){//if the stream is just a partial match
+            streamOffsetList[j].firstDiffByte=readNumber8(atzfile, lastos+35);
+            streamOffsetList[j].diffByteOffsets.reserve(diffbytes);
+            streamOffsetList[j].diffByteVal.reserve(diffbytes);
+            for (i=0;i<diffbytes;i++){
+                streamOffsetList[j].diffByteOffsets.push_back(readNumber8(atzfile, 43+8*i+lastos));
+                streamOffsetList[j].diffByteVal.push_back(readNumber1(atzfile, 43+diffbytes*8+i+lastos));
+            }
+            streamOffsetList[j].atzInfos=&atzBuffer[43+diffbytes*9+lastos];
+            lastos=lastos+43+diffbytes*9+streamOffsetList[j].inflatedLength;
+        }else{//if the stream is a full match
+            streamOffsetList[j].firstDiffByte=-1;//negative value signals full match
+            streamOffsetList[j].atzInfos=&atzBuffer[35+lastos];
+            lastos=lastos+35+streamOffsetList[j].inflatedLength;
+        }
+    }
+    atzfile.close();
+}*/
+
+int main(int argc, char* argv[]){
+	uint64_t i,j;
+	uint64_t infileSize;
+	std::ifstream infile;
+	std::ofstream outfile;
+	std::string infile_name;
+	std::string atzfile_name;
+	std::string reconfile_name;
+	std::vector<fileOffset> offsetList;//offsetList stores memory offsets where potential headers can be found, and the type of the offset
+	std::vector<streamOffset> streamOffsetList;//streamOffsetList stores offsets of confirmed zlib streams and a bunch of data on them
+	z_stream strm;
+	unsigned char* rBuffer;
+
+	uint64_t lastos=0;
+    uint64_t lastlen=0;
+    int ret=-9;
+
+	//PHASE 0
+    //parse CLI arguments, make sure the file name stings do not hold any uninitialized data
+    std::cout<<"AntiZ 0.1.4-git"<<std::endl;
+	infile_name.clear();
+	reconfile_name.clear();
+	atzfile_name.clear();
+	parseCLI(argc, argv, infile_name, atzfile_name, reconfile_name);//parse CLI arguments and if needed jump to reconstruction
+    if (recon) goto PHASE5;
+    #ifdef debug
+        pauser();
+    #endif // debug
+
+    //PHASE 1
+    //search the file for zlib headers, count them and create an offset list
+	if (getFilesize(infile_name, infileSize)!=0) return -1;//if opening the file fails, exit
+	std::cout<<"Input file size:"<<infileSize<<std::endl;
+    //try to guess the number of potential zlib headers in the file from the file size
+    //this value is purely empirical, may need tweaking
+	offsetList.reserve(static_cast<uint64_t>(infileSize/1912));
+	#ifdef debug
+        std::cout<<"Offset list initial capacity:"<<offsetList.capacity()<<std::endl;
+	#endif
+	searchFile(infile_name, offsetList);//search the file for zlib headers
+	std::cout<<"Total zlib headers found: "<<offsetList.size()<<std::endl;
+	#ifdef debug
+        pauser();
+	#endif // debug
+
+    //PHASE 2
+    //start trying to decompress at the collected offsets
+    //test all offsets found in phase 1
+    testOffsetList_chunked(infile_name, offsetList, streamOffsetList);
+    std::cout<<"Valid zlib streams: "<<streamOffsetList.size()<<std::endl;
+    offsetList.clear();//we only need the good offsets
+    offsetList.shrink_to_fit();
+    #ifdef debug
+        pauser();
+    #endif // debug
+
+    //PHASE 3
+    //start trying to find the parameters to use for recompression
+    findDeflateParams_ALL(streamOffsetList, infile_name);
+    std::cout<<std::endl;
+    #ifdef debug
+        printStreaminfo_ALL(streamOffsetList);
     #endif // debug
     std::cout<<"recompressed:"<<countRecomp(streamOffsetList)<<"/"<<streamOffsetList.size()<<std::endl;
     #ifdef debug
-    pauser();
+        pauser();
     #endif // debug
 
     //PHASE 4
@@ -1120,7 +1171,7 @@ int main(int argc, char* argv[]){
     streamOffsetList.clear();
     streamOffsetList.shrink_to_fit();
     #ifdef debug
-    pauser();
+        pauser();
     #endif // debug
 
     //PHASE 5: verify that we can reconstruct the original file, using only data from the ATZ file
