@@ -111,7 +111,7 @@ public:
     //  transforms into 0, 1, 1, 1,...(repetitive, easy to compress)
     std::vector<uint8_t> diffByteVal;
     bool recomp;
-    unsigned char* atzInfos;
+    uint64_t atzInfos;
 };
 
 inline void pauser();
@@ -136,6 +136,7 @@ void writeATZfile(std::string, std::string, std::vector<streamOffset>&);
 void writeStreamdesc(std::ofstream&, std::string, streamOffset&);
 int parseATZheader(std::string, uint64_t&, uint64_t&);
 void printStreaminfo_ALL(std::vector<streamOffset>&);
+uint64_t readStreamdesc_ALL(std::string, std::vector<streamOffset>&, uint64_t);
 
 void parseCLI(int argc, char* argv[], std::string& infile_name, std::string& atzfile_name, std::string& reconfile_name){
     // Wrap everything in a try block.  Do this every time,
@@ -1063,9 +1064,9 @@ void printStreaminfo_ALL(std::vector<streamOffset>& streamOffsetList){
     std::cout<<"fullmatch streams:"<<numFullmatch<<" out of "<<streamOffsetList.size()<<std::endl;
 }
 
-/*void readStreamdesc_ALL(std::string atzfile_name, std::vector<streamOffset>& streamOffsetList, uint64_t nstrms){
+uint64_t readStreamdesc_ALL(std::string atzfile_name, std::vector<streamOffset>& streamOffsetList, uint64_t nstrms){
     uint64_t i,j;
-    uint64_t lastos=28;
+    uint64_t lastos=28;//start after the header part
     std::ifstream atzfile(atzfile_name, std::ios::in | std::ios::binary);
     for (j=0;j<nstrms;j++){
         #ifdef debug
@@ -1085,16 +1086,17 @@ void printStreaminfo_ALL(std::vector<streamOffset>& streamOffsetList){
                 streamOffsetList[j].diffByteOffsets.push_back(readNumber8(atzfile, 43+8*i+lastos));
                 streamOffsetList[j].diffByteVal.push_back(readNumber1(atzfile, 43+diffbytes*8+i+lastos));
             }
-            streamOffsetList[j].atzInfos=&atzBuffer[43+diffbytes*9+lastos];
+            streamOffsetList[j].atzInfos=43+diffbytes*9+lastos;
             lastos=lastos+43+diffbytes*9+streamOffsetList[j].inflatedLength;
         }else{//if the stream is a full match
             streamOffsetList[j].firstDiffByte=-1;//negative value signals full match
-            streamOffsetList[j].atzInfos=&atzBuffer[35+lastos];
+            streamOffsetList[j].atzInfos=35+lastos;
             lastos=lastos+35+streamOffsetList[j].inflatedLength;
         }
     }
     atzfile.close();
-}*/
+    return lastos;
+}
 
 int main(int argc, char* argv[]){
 	uint64_t i,j;
@@ -1109,7 +1111,6 @@ int main(int argc, char* argv[]){
 	z_stream strm;
 	unsigned char* rBuffer;
 
-	uint64_t lastos=0;
     uint64_t lastlen=0;
     int ret=-9;
 
@@ -1177,12 +1178,19 @@ int main(int argc, char* argv[]){
     //PHASE 5: verify that we can reconstruct the original file, using only data from the ATZ file
     PHASE5:
     if (!notest){//dont reconstruct if we wont test it
-    infileSize=0;
-    lastos=28;
     uint64_t origlen=0;
     uint64_t nstrms=0;
 
     if (parseATZheader(atzfile_name, origlen, nstrms)!=0) return -1;
+
+    if (nstrms>0){
+        streamOffsetList.reserve(nstrms);
+        //reead in all the info about the streams
+        uint64_t residueos=readStreamdesc_ALL(atzfile_name, streamOffsetList, nstrms);
+        uint64_t gapsum=0;
+        #ifdef debug
+        pauser();
+        #endif // debug
 
 
 
@@ -1197,57 +1205,8 @@ int main(int argc, char* argv[]){
 
 
 
-    if (nstrms>0){
-        streamOffsetList.reserve(nstrms);
-        //reead in all the info about the streams
-        for (j=0;j<nstrms;j++){
-            #ifdef debug
-            std::cout<<"stream #"<<j<<std::endl;
-            #endif // debug
-            streamOffsetList.push_back(streamOffset(*reinterpret_cast<uint64_t*>(&atzBuffer[lastos]), -1, *reinterpret_cast<uint64_t*>(&atzBuffer[8+lastos]), *reinterpret_cast<uint64_t*>(&atzBuffer[16+lastos])));
-            streamOffsetList[j].clevel=atzBuffer[24+lastos];
-            streamOffsetList[j].window=atzBuffer[25+lastos];
-            streamOffsetList[j].memlvl=atzBuffer[26+lastos];
-            #ifdef debug
-            std::cout<<"   offset:"<<streamOffsetList[j].offset<<std::endl;
-            std::cout<<"   memlevel:"<<+streamOffsetList[j].memlvl<<std::endl;
-            std::cout<<"   clevel:"<<+streamOffsetList[j].clevel<<std::endl;
-            std::cout<<"   window:"<<+streamOffsetList[j].window<<std::endl;
-            #endif // debug
-            //partial match handling
-            uint64_t diffbytes=*reinterpret_cast<uint64_t*>(&atzBuffer[27+lastos]);
-            if (diffbytes>0){//if the stream is just a partial match
-                #ifdef debug
-                std::cout<<"   partial match"<<std::endl;
-                #endif // debug
-                streamOffsetList[j].firstDiffByte=*reinterpret_cast<uint64_t*>(&atzBuffer[35+lastos]);
-                streamOffsetList[j].diffByteOffsets.reserve(diffbytes);
-                streamOffsetList[j].diffByteVal.reserve(diffbytes);
-                for (i=0;i<diffbytes;i++){
-                    streamOffsetList[j].diffByteOffsets.push_back(*reinterpret_cast<uint64_t*>(&atzBuffer[43+8*i+lastos]));
-                    streamOffsetList[j].diffByteVal.push_back(atzBuffer[43+diffbytes*8+i+lastos]);
-                }
-                streamOffsetList[j].atzInfos=&atzBuffer[43+diffbytes*9+lastos];
-                lastos=lastos+43+diffbytes*9+streamOffsetList[j].inflatedLength;
-            } else{//if the stream is a full match
-                #ifdef debug
-                std::cout<<"   full match"<<std::endl;
-                #endif // debug
-                streamOffsetList[j].firstDiffByte=-1;//negative value signals full match
-                streamOffsetList[j].atzInfos=&atzBuffer[35+lastos];
-                lastos=lastos+35+streamOffsetList[j].inflatedLength;
-            }
-        }
-        #ifdef debug
-        std::cout<<"lastos:"<<lastos<<std::endl;
-        #endif // debug
-        uint64_t residueos=lastos;
-        uint64_t gapsum=0;
-        #ifdef debug
-        pauser();
-        #endif // debug
         //do the reconstructing
-        lastos=0;
+        uint64_t lastos=0;
         lastlen=0;
         std::ofstream recfile(reconfile_name, std::ios::out | std::ios::binary | std::ios::trunc);
         //write the gap before the stream(if the is one), then do the compression using the parameters from the ATZ file
@@ -1268,7 +1227,7 @@ int main(int argc, char* argv[]){
                     strm.zalloc = Z_NULL;
                     strm.zfree = Z_NULL;
                     strm.opaque = Z_NULL;
-                    strm.next_in=streamOffsetList[j].atzInfos;
+                    strm.next_in=&atzBuffer[streamOffsetList[j].atzInfos];
                     strm.avail_in=streamOffsetList[j].inflatedLength;
                     //initialize the stream for compression and check for error
                     ret=deflateInit2(&strm, streamOffsetList[j].clevel, Z_DEFLATED, streamOffsetList[j].window, streamOffsetList[j].memlvl, Z_DEFAULT_STRATEGY);
@@ -1337,7 +1296,7 @@ int main(int argc, char* argv[]){
                     strm.zalloc = Z_NULL;
                     strm.zfree = Z_NULL;
                     strm.opaque = Z_NULL;
-                    strm.next_in=streamOffsetList[j].atzInfos;
+                    strm.next_in=&atzBuffer[streamOffsetList[j].atzInfos];
                     strm.avail_in=streamOffsetList[j].inflatedLength;
                     //initialize the stream for compression and check for error
                     ret=deflateInit2(&strm, streamOffsetList[j].clevel, Z_DEFLATED, streamOffsetList[j].window, streamOffsetList[j].memlvl, Z_DEFAULT_STRATEGY);
@@ -1398,19 +1357,34 @@ int main(int argc, char* argv[]){
             recfile.write(reinterpret_cast<char*>(atzBuffer+residueos+gapsum), (origlen-(lastos+lastlen)));
         }
         recfile.close();
+        delete [] atzBuffer;
     }else{//if there are no recompressed streams
         #ifdef debug
         std::cout<<"no recompressed streams in the ATZ file, copying "<<origlen<<" bytes"<<std::endl;
         #endif // debug
+
+
+
+    //HACK TO MAKE OLD CODE WORK
+    getFilesize(atzfile_name, infileSize);
+    std::ifstream atzfile;
+    atzfile.open(atzfile_name, std::ios::in | std::ios::binary);
+    unsigned char* atzBuffer = new unsigned char[infileSize];
+    atzfile.read(reinterpret_cast<char*>(atzBuffer), infileSize);
+    atzfile.close();
+    ////////////////////////////
+
+
+
         std::ofstream recfile(reconfile_name, std::ios::out | std::ios::binary | std::ios::trunc);
         recfile.write(reinterpret_cast<char*>(atzBuffer+28), origlen);
         recfile.close();
+        delete [] atzBuffer;
     }
 
     #ifdef debug
     pauser();
     #endif // debug
-    delete [] atzBuffer;
     }
 
     //PHASE 6: verify that the reconstructed file is identical to the original
