@@ -3,6 +3,7 @@
 #include <cstring>//for memset()
 #include <zlib.h>
 #include <tclap/CmdLine.h>
+#define antiz_ver "0.1.4-git"
 
 //parameters that some users may want to tweak
 uint_fast16_t recompTresh;//streams are only recompressed if the best match differs from the original in <= recompTresh bytes
@@ -143,7 +144,7 @@ void parseCLI(int argc, char* argv[], std::string& infile_name, std::string& atz
 	// because exceptions will be thrown for problems.
 	try{
         // Define the command line object.
-        TCLAP::CmdLine cmd("Visit https://github.com/Diazonium/AntiZ for source code and support.", ' ', "0.1.4-git");
+        TCLAP::CmdLine cmd("Visit https://github.com/Diazonium/AntiZ for source code and support.", ' ', antiz_ver);
 
         // Define a value argument and add it to the command line. This defines the input file.
         TCLAP::ValueArg<std::string> infileArg("i", "input", "Input file name", true, "", "string");
@@ -257,7 +258,7 @@ uint64_t compare_buff2f(std::string fname, unsigned char buff[], uint64_t buffle
     return match;
 }
 
-int inflate_f2f(std::string infile, std::string outfile, uint64_t offset){
+int inflate_f2f(std::string infile, std::string outfile, uint64_t inoffset){
     std::ifstream in;
     std::ofstream out;
     z_stream strm;
@@ -276,7 +277,7 @@ int inflate_f2f(std::string infile, std::string outfile, uint64_t offset){
         delete [] outbuff;
         return -1;
     }
-    in.seekg(offset);//seek to the beginning of the stream
+    in.seekg(inoffset);//seek to the beginning of the stream
     in.read(reinterpret_cast<char*>(inbuff), chunksize);
     strm.zalloc=Z_NULL;
     strm.zfree=Z_NULL;
@@ -1098,6 +1099,35 @@ uint64_t readStreamdesc_ALL(std::string atzfile_name, std::vector<streamOffset>&
     return lastos;
 }
 
+void doDeflate(unsigned char* next_in, uint64_t avail_in, unsigned char* next_out, uint64_t avail_out, uint8_t clvl, uint8_t window, uint8_t memlvl){
+    z_stream strm;
+    int ret;
+    strm.zalloc = Z_NULL;
+    strm.zfree = Z_NULL;
+    strm.opaque = Z_NULL;
+    strm.next_in=next_in;
+    strm.avail_in=avail_in;
+        //initialize the stream for compression and check for error
+    ret=deflateInit2(&strm, clvl, Z_DEFLATED, window, memlvl, Z_DEFAULT_STRATEGY);
+    if(ret!=Z_OK){
+        std::cout<<"deflateInit() failed with exit code:"<<ret<<std::endl;
+        abort();
+    }
+    strm.next_out=next_out;
+    strm.avail_out=avail_out;
+    ret=deflate(&strm, Z_FINISH);//try to do the actual decompression in one pass
+    //check the return value
+    if (ret!=Z_STREAM_END){
+        std::cout<<"deflate() failed with exit code:"<<ret<<std::endl;
+        abort();
+    }
+    ret=deflateEnd(&strm);
+    if (ret!=Z_OK){
+        std::cout<<"deflateEnd() failed with exit code:"<<ret<<std::endl;//should never happen normally
+        abort();
+    }
+}
+
 int main(int argc, char* argv[]){
 	uint64_t i,j;
 	uint64_t infileSize;
@@ -1108,15 +1138,13 @@ int main(int argc, char* argv[]){
 	std::string reconfile_name;
 	std::vector<fileOffset> offsetList;//offsetList stores memory offsets where potential headers can be found, and the type of the offset
 	std::vector<streamOffset> streamOffsetList;//streamOffsetList stores offsets of confirmed zlib streams and a bunch of data on them
-	z_stream strm;
 	unsigned char* rBuffer;
 
     uint64_t lastlen=0;
-    int ret=-9;
 
 	//PHASE 0
     //parse CLI arguments, make sure the file name stings do not hold any uninitialized data
-    std::cout<<"AntiZ 0.1.4-git"<<std::endl;
+    std::cout<<"AntiZ "<<antiz_ver<<std::endl;
 	infile_name.clear();
 	reconfile_name.clear();
 	atzfile_name.clear();
@@ -1218,51 +1246,8 @@ int main(int argc, char* argv[]){
                 std::cout<<"reconstructing stream #"<<j<<std::endl;
                 #endif // debug
                 //a buffer needs to be created to hold the compressed data
-                unsigned char* compBuffer= new unsigned char[streamOffsetList[j].streamLength+32768];
-                {
-                    //do compression
-                    #ifdef debug
-                    std::cout<<"   compressing"<<std::endl;
-                    #endif // debug
-                    strm.zalloc = Z_NULL;
-                    strm.zfree = Z_NULL;
-                    strm.opaque = Z_NULL;
-                    strm.next_in=&atzBuffer[streamOffsetList[j].atzInfos];
-                    strm.avail_in=streamOffsetList[j].inflatedLength;
-                    //initialize the stream for compression and check for error
-                    ret=deflateInit2(&strm, streamOffsetList[j].clevel, Z_DEFLATED, streamOffsetList[j].window, streamOffsetList[j].memlvl, Z_DEFAULT_STRATEGY);
-                    if (ret != Z_OK)
-                    {
-                        std::cout<<"deflateInit() failed with exit code:"<<ret<<std::endl;
-                        pauser();
-                        abort();
-                    }
-                    strm.next_out=compBuffer;
-                    strm.avail_out=streamOffsetList[j].streamLength+32768;
-                    ret=deflate(&strm, Z_FINISH);//try to do the actual decompression in one pass
-                    //check the return value
-                    switch (ret)
-                    {
-                        case Z_STREAM_END://decompression was succesful
-                        {
-                            break;
-                        }
-                        default://shit hit the fan, should never happen normally
-                        {
-                            std::cout<<"deflate() failed with exit code:"<<ret<<std::endl;
-                            pauser();
-                            abort();
-                        }
-                    }
-                    //deallocate the zlib stream, check for errors
-                    ret=deflateEnd(&strm);
-                    if (ret!=Z_OK)
-                    {
-                        std::cout<<"deflateEnd() failed with exit code:"<<ret<<std::endl;//should never happen normally
-                        pauser();
-                        return ret;
-                    }
-                }
+                unsigned char* compBuffer= new unsigned char[streamOffsetList[j].streamLength+65535];
+                doDeflate(&atzBuffer[streamOffsetList[j].atzInfos], streamOffsetList[j].inflatedLength, compBuffer, streamOffsetList[j].streamLength+65535, streamOffsetList[j].clevel, streamOffsetList[j].window, streamOffsetList[j].memlvl);
                 //do stream modification if needed
                 if (streamOffsetList[j].firstDiffByte>=0){
                     #ifdef debug
@@ -1287,51 +1272,8 @@ int main(int argc, char* argv[]){
                 std::cout<<"reconstructing stream #"<<j<<std::endl;
                 #endif // debug
                 //a buffer needs to be created to hold the compressed data
-                unsigned char* compBuffer= new unsigned char[streamOffsetList[j].streamLength+32768];
-                {
-                    //do compression
-                    #ifdef debug
-                    std::cout<<"   compressing"<<std::endl;
-                    #endif // debug
-                    strm.zalloc = Z_NULL;
-                    strm.zfree = Z_NULL;
-                    strm.opaque = Z_NULL;
-                    strm.next_in=&atzBuffer[streamOffsetList[j].atzInfos];
-                    strm.avail_in=streamOffsetList[j].inflatedLength;
-                    //initialize the stream for compression and check for error
-                    ret=deflateInit2(&strm, streamOffsetList[j].clevel, Z_DEFLATED, streamOffsetList[j].window, streamOffsetList[j].memlvl, Z_DEFAULT_STRATEGY);
-                    if (ret != Z_OK)
-                    {
-                        std::cout<<"deflateInit() failed with exit code:"<<ret<<std::endl;
-                        pauser();
-                        abort();
-                    }
-                    strm.next_out=compBuffer;
-                    strm.avail_out=streamOffsetList[j].streamLength+32768;
-                    ret=deflate(&strm, Z_FINISH);//try to do the actual decompression in one pass
-                    //check the return value
-                    switch (ret)
-                    {
-                        case Z_STREAM_END://decompression was succesful
-                        {
-                            break;
-                        }
-                        default://shit hit the fan, should never happen normally
-                        {
-                            std::cout<<"deflate() failed with exit code:"<<ret<<std::endl;
-                            pauser();
-                            abort();
-                        }
-                    }
-                    //deallocate the zlib stream, check for errors
-                    ret=deflateEnd(&strm);
-                    if (ret!=Z_OK)
-                    {
-                        std::cout<<"deflateEnd() failed with exit code:"<<ret<<std::endl;//should never happen normally
-                        pauser();
-                        return ret;
-                    }
-                }
+                unsigned char* compBuffer= new unsigned char[streamOffsetList[j].streamLength+65535];
+                doDeflate(&atzBuffer[streamOffsetList[j].atzInfos], streamOffsetList[j].inflatedLength, compBuffer, streamOffsetList[j].streamLength+65535, streamOffsetList[j].clevel, streamOffsetList[j].window, streamOffsetList[j].memlvl);
                 //do stream modification if needed
                 if (streamOffsetList[j].firstDiffByte>=0){
                     #ifdef debug
