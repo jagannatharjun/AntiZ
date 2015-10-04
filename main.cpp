@@ -122,6 +122,7 @@ void searchBuffer(unsigned char [], std::vector<fileOffset>&, uint64_t, uint64_t
 //void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets);
 int parseOffsetType(int);
 int doInflate(unsigned char*, uint64_t, unsigned char*, uint64_t);
+void doDeflate(unsigned char*, uint64_t, unsigned char*, uint64_t, uint8_t, uint8_t, uint8_t);
 bool testDeflateParams(unsigned char [], unsigned char [], streamOffset&, uint8_t, uint8_t, uint8_t);
 void findDeflateParams_ALL(std::vector<streamOffset>&, std::string);
 inline bool testParamRange(unsigned char [], unsigned char [], streamOffset&, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t);
@@ -138,6 +139,7 @@ void writeStreamdesc(std::ofstream&, std::string, streamOffset&);
 int parseATZheader(std::string, uint64_t&, uint64_t&);
 void printStreaminfo_ALL(std::vector<streamOffset>&);
 uint64_t readStreamdesc_ALL(std::string, std::vector<streamOffset>&, uint64_t);
+bool test_f2f(std::string, std::string);
 
 void parseCLI(int argc, char* argv[], std::string& infile_name, std::string& atzfile_name, std::string& reconfile_name){
     // Wrap everything in a try block.  Do this every time,
@@ -256,6 +258,32 @@ uint64_t compare_buff2f(std::string fname, unsigned char buff[], uint64_t buffle
         }
     }
     return match;
+}
+
+bool test_f2f(std::string fname1, std::string fname2){
+    //returns true if the files are identical
+    uint64_t fsize1, fsize2, i;
+    getFilesize(fname1, fsize1);
+    getFilesize(fname2, fsize2);
+    if (fsize1!=fsize2) return false;
+    inbuffer buffobj1(fname1, chunksize, 0);
+    inbuffer buffobj2(fname2, chunksize, 0);
+    if (fsize1<=chunksize){
+        for (i=0;i<fsize1;i++){
+            if (buffobj1.buff[i]!=buffobj2.buff[i]) return false;
+        }
+    }else{
+        uint64_t done=0;
+        while(done<fsize1){
+            for (i=0;i<chunksize;i++){
+                if (buffobj1.buff[i]!=buffobj2.buff[i]) return false;
+                done++;
+            }
+            buffobj1.next_chunk();
+            buffobj2.next_chunk();
+        }
+    }
+    return true;
 }
 
 int inflate_f2f(std::string infile, std::string outfile, uint64_t inoffset){
@@ -1138,7 +1166,6 @@ int main(int argc, char* argv[]){
 	std::string reconfile_name;
 	std::vector<fileOffset> offsetList;//offsetList stores memory offsets where potential headers can be found, and the type of the offset
 	std::vector<streamOffset> streamOffsetList;//streamOffsetList stores offsets of confirmed zlib streams and a bunch of data on them
-	unsigned char* rBuffer;
 
     uint64_t lastlen=0;
 
@@ -1289,51 +1316,21 @@ int main(int argc, char* argv[]){
 
     //PHASE 6: verify that the reconstructed file is identical to the original
     if((!recon)&&(!notest)){//if we are just reconstructing we dont have the original file
+        uint64_t recfileSize;
         std::cout<<"Testing...";
-        //open the original file and read it in
-        infile.open(infile_name, std::ios::in | std::ios::binary);
-        if (!infile.is_open()) {
-            std::cout << "error: open file for input failed!" << std::endl;
-            abort();
-        }
-        //getting the size of the file
-        infile.seekg (0, infile.end);
-        infileSize=infile.tellg();
-        infile.seekg (0, infile.beg);
+        getFilesize(infile_name, infileSize);
+        getFilesize(reconfile_name, recfileSize);
         #ifdef debug
         std::cout<<std::endl<<"Original file size:"<<infileSize<<std::endl;
-        #endif // debug
-        //setting up read buffer and reading the entire file into the buffer
-        rBuffer = new unsigned char[infileSize];
-        infile.read(reinterpret_cast<char*>(rBuffer), infileSize);
-        infile.close();
-        std::ifstream recfile;
-        //open the reconstructed file and read it in
-        recfile.open(reconfile_name, std::ios::in | std::ios::binary);
-        if (!recfile.is_open()) {
-            std::cout << "error: open file for input failed!" << std::endl;
-            abort();
-        }
-        //getting the size of the file
-        recfile.seekg (0, recfile.end);
-        uint64_t recfileSize=recfile.tellg();
-        recfile.seekg (0, recfile.beg);
-        #ifdef debug
         std::cout<<std::endl<<"Reconstructed file size:"<<recfileSize<<std::endl;
         #endif // debug
-        //setting up read buffer and reading the entire file into the buffer
-        unsigned char* recBuffer = new unsigned char[recfileSize];
-        recfile.read(reinterpret_cast<char*>(recBuffer), recfileSize);
-        recfile.close();
         if(infileSize!=recfileSize){
             std::cout<<"error: size mismatch";
             abort();
         }
-        for (i=0; i<infileSize; i++){
-            if (rBuffer[i]!=recBuffer[i]){
-                std::cout<<"error: byte mismatch "<<i;
-                abort();
-            }
+        if (!test_f2f(infile_name, reconfile_name)){
+            std::cout<<"error: byte mismatch";
+            abort();
         }
         std::cout<<"OK!"<<std::endl;
         #ifdef debug
