@@ -1219,20 +1219,6 @@ int main(int argc, char* argv[]){
         #ifdef debug
         pauser();
         #endif // debug
-
-
-
-    //HACK TO MAKE OLD CODE WORK
-    getFilesize(atzfile_name, infileSize);
-    std::ifstream atzfile;
-    atzfile.open(atzfile_name, std::ios::in | std::ios::binary);
-    unsigned char* atzBuffer = new unsigned char[infileSize];
-    atzfile.read(reinterpret_cast<char*>(atzBuffer), infileSize);
-    atzfile.close();
-    ////////////////////////////
-
-
-
         //do the reconstructing
         uint64_t lastos=0;
         lastlen=0;
@@ -1245,9 +1231,12 @@ int main(int argc, char* argv[]){
                 std::cout<<"no gap before stream #"<<j<<std::endl;
                 std::cout<<"reconstructing stream #"<<j<<std::endl;
                 #endif // debug
-                //a buffer needs to be created to hold the compressed data
+                //a buffer needs to be created to hold the decompressed and the compressed data
                 unsigned char* compBuffer= new unsigned char[streamOffsetList[j].streamLength+65535];
-                doDeflate(&atzBuffer[streamOffsetList[j].atzInfos], streamOffsetList[j].inflatedLength, compBuffer, streamOffsetList[j].streamLength+65535, streamOffsetList[j].clevel, streamOffsetList[j].window, streamOffsetList[j].memlvl);
+                unsigned char* readBuff= new unsigned char[streamOffsetList[j].inflatedLength];
+                //read in the decompressed stream from ATZ file
+                read2buff(atzfile_name, readBuff, streamOffsetList[j].inflatedLength, streamOffsetList[j].atzInfos);
+                doDeflate(readBuff, streamOffsetList[j].inflatedLength, compBuffer, streamOffsetList[j].streamLength+65535, streamOffsetList[j].clevel, streamOffsetList[j].window, streamOffsetList[j].memlvl);
                 //do stream modification if needed
                 if (streamOffsetList[j].firstDiffByte>=0){
                     #ifdef debug
@@ -1262,18 +1251,23 @@ int main(int argc, char* argv[]){
                 }
                 recfile.write(reinterpret_cast<char*>(compBuffer), streamOffsetList[j].streamLength);
                 delete [] compBuffer;
+                delete [] readBuff;
             }else{
                 #ifdef debug
                 std::cout<<"gap of "<<(streamOffsetList[j].offset-(lastos+lastlen))<<" bytes before stream #"<<j<<std::endl;
                 #endif // debug
-                recfile.write(reinterpret_cast<char*>(atzBuffer+residueos+gapsum), (streamOffsetList[j].offset-(lastos+lastlen)));
+                //copy the gap
+                copyto(recfile, atzfile_name, streamOffsetList[j].offset-(lastos+lastlen), residueos+gapsum);
                 gapsum=gapsum+(streamOffsetList[j].offset-(lastos+lastlen));
                 #ifdef debug
                 std::cout<<"reconstructing stream #"<<j<<std::endl;
                 #endif // debug
                 //a buffer needs to be created to hold the compressed data
                 unsigned char* compBuffer= new unsigned char[streamOffsetList[j].streamLength+65535];
-                doDeflate(&atzBuffer[streamOffsetList[j].atzInfos], streamOffsetList[j].inflatedLength, compBuffer, streamOffsetList[j].streamLength+65535, streamOffsetList[j].clevel, streamOffsetList[j].window, streamOffsetList[j].memlvl);
+                unsigned char* readBuff= new unsigned char[streamOffsetList[j].inflatedLength];
+                //read in the decompressed stream from ATZ file
+                read2buff(atzfile_name, readBuff, streamOffsetList[j].inflatedLength, streamOffsetList[j].atzInfos);
+                doDeflate(readBuff, streamOffsetList[j].inflatedLength, compBuffer, streamOffsetList[j].streamLength+65535, streamOffsetList[j].clevel, streamOffsetList[j].window, streamOffsetList[j].memlvl);
                 //do stream modification if needed
                 if (streamOffsetList[j].firstDiffByte>=0){
                     #ifdef debug
@@ -1288,10 +1282,23 @@ int main(int argc, char* argv[]){
                 }
                 recfile.write(reinterpret_cast<char*>(compBuffer), streamOffsetList[j].streamLength);
                 delete [] compBuffer;
+                delete [] readBuff;
+
             }
             lastos=streamOffsetList[j].offset;
             lastlen=streamOffsetList[j].streamLength;
         }
+
+        //HACK TO MAKE OLD CODE WORK
+    getFilesize(atzfile_name, infileSize);
+    std::ifstream atzfile;
+    atzfile.open(atzfile_name, std::ios::in | std::ios::binary);
+    unsigned char* atzBuffer = new unsigned char[infileSize];
+    atzfile.read(reinterpret_cast<char*>(atzBuffer), infileSize);
+    atzfile.close();
+    ////////////////////////////
+
+
         if ((lastos+lastlen)<origlen){
             #ifdef debug
             std::cout<<"copying "<<(origlen-(lastos+lastlen))<<" bytes to the end of the file"<<std::endl;
