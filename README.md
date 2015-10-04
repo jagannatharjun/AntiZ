@@ -3,19 +3,30 @@
 AntiZ is a project to create an open source precompressor for lightly compressed data.(currently Zlib)
 Zlib is very common, for example it is used in PDF, JAR, ZIP, PNG etc.
 It is fast but it has a poor compression ratio, and it is usually not effective to use a stronger compression(eg. LZMA) on data that has been compressed with Zlib. It would be much better if the data was not compressed at all before the sron compression. For example:
-PDF file: 172KB---->compresses to 124KB with 7ZIP 9.38 beta (ultra preset)
-PDF file: 172KB---->expands to 745KB with AntiZ----->compresses to 104KB with 7ZIP
+   PDF file: 172KB---->compresses to 124KB with 7ZIP 9.38 beta (ultra preset)
+   PDF file: 172KB---->expands to 745KB with AntiZ----->compresses to 104KB with 7ZIP
 
 Of course this process is not trivial if you want to get back the original file, byte identical.
 This project is inspiried by and aims to be a replacement for the long abandoned precomp project (non open source).
 http://schnaader.info/precomp.php
 
+AntiZ is currently in alpha stage, the ATZ1 file format is not very polished, has almost no integrity checksa and wastes space. There may also be bugs. I do not recommend using it on important data yet, especially since later versions will not support the ATZ1 file format.
+
+AntiZ supports any file that contains a standard deflate stream, such as PDF, JAR, some PNGs and many others. Files that contain headerless or otherwise altered deflate streams(eg. ZIP) are currently not supported.
+
+A number of people have contributed ideas, kind words, testing and code to the development of AntiZ:
+
+   hxim (https://github.com/hxim)
+   the encode.ru community (http://encode.ru/threads/2197-AntiZ-an-open-source-alternative-to-precomp)
+   
+Thank you!
+
 USAGE:
 
-   antiz.exe  [--brute-window] [-r] [--mismatch-tol <integer>]
-               [--shortcut-len <integer>] [--sizediff-tresh <integer>]
-               [--recomp-tresh <integer>] [-o <string>] -i <string> [--]
-               [--version] [-h]
+   uncomp.exe  [--brute-window] [--notest] [-r] [--chunksize <integer>]
+               [--mismatch-tol <integer>] [--shortcut-len <integer>]
+               [--sizediff-tresh <integer>] [--recomp-tresh <integer>] [-o
+               <string>] -i <string> [--] [--version] [-h]
 
 
 Where:
@@ -25,9 +36,20 @@ Where:
      could be improved by it. This can have a major performance penalty.
      Default: disabled
 
+   --notest
+     Skip comparing the reconstructed file to the original at the end. This
+     is not recommended, as AntiZ is still experimental software and my
+     contain bugs that corrupt data.
+
    -r,  --reconstruct
      Assume the input file is an ATZ file and attempt to reconstruct the
      original file from it
+
+   --chunksize <integer>
+     Size of the memory buffer in bytes for chunked disk IO. This contorls
+     memory usage to some extent, but memory usage control is not fully
+     implemented yet. Smaller values result in more disk IO operations.
+     Default: 524288
 
    --mismatch-tol <integer>
      Mismatch tolerance in bytes. If a set of parameters are found that
