@@ -23,6 +23,7 @@
 					<Add option="-pg" />
 					<Add option="-g" />
 					<Add option="-Ddebug" />
+					<Add option="-DHAVE_LONG_LONG" />
 				</Compiler>
 				<Linker>
 					<Add option="-pg -lgmon" />
@@ -38,6 +39,7 @@
 				<Compiler>
 					<Add option="-march=core2" />
 					<Add option="-O3" />
+					<Add option="-DHAVE_LONG_LONG" />
 				</Compiler>
 				<Linker>
 					<Add option="-s" />
@@ -55,6 +57,7 @@
 					<Add option="-march=core2" />
 					<Add option="-O3" />
 					<Add option="-m32" />
+					<Add option="-DHAVE_LONG_LONG" />
 				</Compiler>
 				<Linker>
 					<Add option="-s" />

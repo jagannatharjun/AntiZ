@@ -3,7 +3,7 @@
 #include <cstring>//for memset()
 #include <zlib.h>
 #include <tclap/CmdLine.h>
-#define antiz_ver "0.1.4-git"
+#define antiz_ver "0.1.4a"
 
 //parameters that some users may want to tweak
 uint_fast16_t recompTresh;//streams are only recompressed if the best match differs from the original in <= recompTresh bytes
@@ -11,7 +11,7 @@ uint_fast16_t sizediffTresh;//streams are only compared when the size difference
 uint_fast16_t shortcutLength;//stop compression and count mismatches after this many bytes, if we get more than recompTresh then bail early
 uint_fast16_t mismatchTol;//if there are at most this many mismatches consider the stream a full match and stop looking for better parameters
 bool bruteforceWindow=false;//bruteforce the zlib parameters, otherwise only try probable parameters based on the 2-byte header
-uint64_t chunksize=16*1024;
+uint64_t chunksize;//the size of buffers used for file IO, controls memory usage
 
 //debug parameters, not useful for most users
 bool shortcutEnabled=true;//enable speedup shortcut in phase 3
@@ -164,6 +164,8 @@ void parseCLI(int argc, char* argv[], std::string& infile_name, std::string& atz
         cmd.add(shortcutlenArg);
         TCLAP::ValueArg<uint_fast16_t> mismatchtolArg("", "mismatch-tol", "Mismatch tolerance in bytes. If a set of parameters are found that give at most this many mismatches, then accept them and stop looking for a better set of parameters. Increasing this improves speed at the cost of more ATZ file overhead that may hurt compression. Default: 2  Maximum: 65535", false, 2, "integer");
         cmd.add(mismatchtolArg);
+        TCLAP::ValueArg<uint64_t> chunksizeArg("", "chunksize", "Size of the memory buffer in bytes for chunked disk IO. This contorls memory usage to some extent, but memory usage control is not fully implemented yet. Smaller values result in more disk IO operations. Default: 524288", false, 524288, "integer");
+        cmd.add(chunksizeArg);//HAVE_LONG_LONG must be defined, or TCLAP will not handle 64bit ints
 
         // Define a switch and add it to the command line.
         TCLAP::SwitchArg reconSwitch("r", "reconstruct", "Assume the input file is an ATZ file and attempt to reconstruct the original file from it", false);
@@ -183,6 +185,7 @@ void parseCLI(int argc, char* argv[], std::string& infile_name, std::string& atz
         shortcutLength= shortcutlenArg.getValue();
         mismatchTol= mismatchtolArg.getValue();
         bruteforceWindow= brutewindowSwitch.getValue();
+        chunksize= chunksizeArg.getValue();
 
         recon = reconSwitch.getValue();//check if we need to reconstruct only
         notest= notestSwitch.getValue();
