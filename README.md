@@ -17,6 +17,7 @@ AntiZ supports any file that contains a standard deflate stream, such as PDF, JA
 A number of people have contributed ideas, kind words, testing and code to the development of AntiZ:
 
    hxim (https://github.com/hxim)
+   
    the encode.ru community (http://encode.ru/threads/2197-AntiZ-an-open-source-alternative-to-precomp)
    
 Thank you!
