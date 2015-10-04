@@ -1265,47 +1265,21 @@ int main(int argc, char* argv[]){
             lastos=streamOffsetList[j].offset;
             lastlen=streamOffsetList[j].streamLength;
         }
-
-        //HACK TO MAKE OLD CODE WORK
-    getFilesize(atzfile_name, infileSize);
-    std::ifstream atzfile;
-    atzfile.open(atzfile_name, std::ios::in | std::ios::binary);
-    unsigned char* atzBuffer = new unsigned char[infileSize];
-    atzfile.read(reinterpret_cast<char*>(atzBuffer), infileSize);
-    atzfile.close();
-    ////////////////////////////
-
-
         if ((lastos+lastlen)<origlen){
             #ifdef debug
             std::cout<<"copying "<<(origlen-(lastos+lastlen))<<" bytes to the end of the file"<<std::endl;
             #endif // debug
-            recfile.write(reinterpret_cast<char*>(atzBuffer+residueos+gapsum), (origlen-(lastos+lastlen)));
+            //copy the end of the original file after the last stream to finish reconstruction
+            copyto(recfile, atzfile_name, origlen-(lastos+lastlen), residueos+gapsum);
         }
         recfile.close();
-        delete [] atzBuffer;
     }else{//if there are no recompressed streams
         #ifdef debug
         std::cout<<"no recompressed streams in the ATZ file, copying "<<origlen<<" bytes"<<std::endl;
         #endif // debug
-
-
-
-    //HACK TO MAKE OLD CODE WORK
-    getFilesize(atzfile_name, infileSize);
-    std::ifstream atzfile;
-    atzfile.open(atzfile_name, std::ios::in | std::ios::binary);
-    unsigned char* atzBuffer = new unsigned char[infileSize];
-    atzfile.read(reinterpret_cast<char*>(atzBuffer), infileSize);
-    atzfile.close();
-    ////////////////////////////
-
-
-
         std::ofstream recfile(reconfile_name, std::ios::out | std::ios::binary | std::ios::trunc);
-        recfile.write(reinterpret_cast<char*>(atzBuffer+28), origlen);
+        copyto(recfile, atzfile_name, origlen, 28);
         recfile.close();
-        delete [] atzBuffer;
     }
 
     #ifdef debug
