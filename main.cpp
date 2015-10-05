@@ -3,7 +3,7 @@
 #include <cstring>//for memset()
 #include <zlib.h>
 #include <tclap/CmdLine.h>
-#define antiz_ver "0.1.4a"
+#define antiz_ver "0.1.5-git"
 
 //parameters that some users may want to tweak
 uint_fast16_t recompTresh;//streams are only recompressed if the best match differs from the original in <= recompTresh bytes
@@ -935,15 +935,21 @@ inline void read2buff(std::string fname, unsigned char buff[], uint64_t bufflen,
     infile.close();
 }
 
-void copyto(std::ofstream& outfile, std::string ifname, uint64_t length, uint64_t offset){
-    std::ifstream infile;
-    unsigned char* buff=new unsigned char[length];
-    infile.open(ifname, std::ios::in | std::ios::binary);
-    infile.seekg(offset);
-    infile.read(reinterpret_cast<char*>(buff), length);
-    infile.close();
-    outfile.write(reinterpret_cast<char*>(buff), length);
-    delete [] buff;
+void copyto(std::ofstream& outfile, std::string ifname, uint64_t length, uint64_t inoffset){
+    inbuffer buffobj(ifname, chunksize, inoffset);
+    if (chunksize>=length){
+        outfile.write(reinterpret_cast<char*>(buffobj.buff), length);
+    }else{
+        uint64_t done=0;
+        while(done<=(length-chunksize)){
+            outfile.write(reinterpret_cast<char*>(buffobj.buff), chunksize);
+            buffobj.next_chunk();
+            done=done+chunksize;
+        }
+        if ((length-done)!=0){
+            outfile.write(reinterpret_cast<char*>(buffobj.buff), length-done);
+        }
+    }
 }
 
 void writeStreamdesc(std::ofstream& outfile, std::string ifname, streamOffset& streamobj){
