@@ -739,7 +739,7 @@ inline int CheckOffset_chunked(z_stream& strm){
 }
 
 void testOffsetList_chunked(std::string fname, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets){
-    //this function takes a vector of fileOffsets, a buffer of bufflen length and tests if the offsets in the fileOffset vector
+    //this function takes a vector of fileOffsets and the name of the file, and tests if the offsets in the fileOffset vector
     //are marking the beginnings of valid zlib streams
     //the offsets, types, lengths and inflated lengths of valid zlib streams are pushed to a vector of streamOffsets
 	uint64_t numOffsets=fileoffsets.size();
@@ -884,6 +884,8 @@ void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOf
 }*/
 
 void searchFile(std::string fname, std::vector<fileOffset>& fileoffsets){
+    //open a file and search it for possible Zlib headers
+    //all information about them is pushed into a vector
     std::ifstream f;
     uint64_t i;
     unsigned char* rBuffer;
