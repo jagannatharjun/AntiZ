@@ -32,37 +32,66 @@ public:
             open=true;
             buff=new unsigned char[buffsize];
             f.seekg(startpos);
+            buffstart=startpos;
             f.read(reinterpret_cast<char*>(buff), buffsize);
+            #ifdef debug
+            nreads++;
+            #endif // debug
         }
     }
     ~inbuffer(){
         delete [] buff;
         f.close();
+        #ifdef debug
+            std::cout<<"Total reads: "<<nreads<<std::endl;
+        #endif // debug
     }
     void next_chunk(){
+        buffstart=buffstart+buffsize;
         f.read(reinterpret_cast<char*>(buff), buffsize);
+        #ifdef debug
+            nreads++;
+        #endif // debug
     }
     void restart(){
         f.clear();
         f.seekg(startpos);
+        buffstart=startpos;
         f.read(reinterpret_cast<char*>(buff), buffsize);
+        #ifdef debug
+            nreads++;
+        #endif // debug
     }
     void seekread(uint64_t pos){
         f.clear();
         f.seekg(pos);
+        buffstart=pos;
         f.read(reinterpret_cast<char*>(buff), buffsize);
+        #ifdef debug
+            nreads++;
+        #endif // debug
     }
     void seekread_rel(int64_t relpos){
         f.clear();
         f.seekg(relpos, f.cur);
+        buffstart=(int64_t)buffstart+relpos;
         f.read(reinterpret_cast<char*>(buff), buffsize);
+        #ifdef debug
+            nreads++;
+        #endif // debug
+    }
+    bool eof(){
+        return f.eof();
     }
     unsigned char* buff;
     bool open=false;
+    uint64_t buffstart;
 private:
     std::ifstream f;
     uint64_t startpos,buffsize;
-
+    #ifdef debug
+        uint64_t nreads=0;
+    #endif // debug
 };
 
 class fileOffset{
@@ -751,19 +780,19 @@ void testOffsetList_chunked(std::string fname, std::vector<fileOffset>& fileoffs
 	strm.zalloc=Z_NULL;
     strm.zfree=Z_NULL;
     strm.opaque=Z_NULL;
-    unsigned char* rBuffer= new unsigned char[chunksize];//for reading in data from the file
-    std::ifstream f;
-    f.open(fname, std::ios::in | std::ios::binary);//open the file
-
+    inbuffer infile(fname, chunksize, 0);//for reading in data from the file
     for (i=0; i<numOffsets; i++){
         if ((lastGoodOffset+lastStreamLength)<=fileoffsets[i].offset){//if the current offset is known to be part of the last stream it is pointless to check it
             //read in the first chunk
             //since we have no idea about the length of the zlib stream, take the worst case, i.e. everything after the header belongs to the stream
-            f.clear();//the ifstream may be in an error state, this clears it
-            f.seekg(fileoffsets[i].offset);//seek to the beginning of the stream
-            f.read(reinterpret_cast<char*>(rBuffer), chunksize);
-            strm.next_in=rBuffer;
-            strm.avail_in=chunksize;
+            if (fileoffsets[i].offset<(infile.buffstart+chunksize-15)){//if the first 16 bytes of the current stream is already in the buffer
+                strm.next_in=infile.buff+(fileoffsets[i].offset-infile.buffstart);
+                strm.avail_in=chunksize-(fileoffsets[i].offset-infile.buffstart);
+            } else {
+                infile.seekread(fileoffsets[i].offset);//seek to the beginning of the current stream
+                strm.next_in=infile.buff;
+                strm.avail_in=chunksize;
+            }
             if (inflateInit(&strm)!=Z_OK){
                 std::cout<<"inflateInit() failed"<<std::endl;
                 abort();
@@ -781,9 +810,9 @@ void testOffsetList_chunked(std::string fname, std::vector<fileOffset>& fileoffs
                 }
                 if (ret==1) break;//if the stream is invalid
                 if (ret==2){//need more input
-                    if (f.eof()) break;
-                    f.read(reinterpret_cast<char*>(rBuffer), chunksize);
-                    strm.next_in=rBuffer;
+                    if (infile.eof()) break;//if there is a truncated Zlib stream at the end of the file
+                    infile.next_chunk();
+                    strm.next_in=infile.buff;
                     strm.avail_in=chunksize;
                 }
                 if (ret<0) abort();//should never happen normally
@@ -800,8 +829,6 @@ void testOffsetList_chunked(std::string fname, std::vector<fileOffset>& fileoffs
         #endif // debug
     }
     std::cout<<std::endl;
-    f.close();
-    delete [] rBuffer;
 }
 
 /*bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, uint64_t& total_out){
