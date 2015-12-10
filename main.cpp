@@ -172,6 +172,7 @@ int parseATZheader(std::string, uint64_t&, uint64_t&);
 void printStreaminfo_ALL(std::vector<streamOffset>&, uint_fast16_t);
 uint64_t readStreamdesc_ALL(std::string, std::vector<streamOffset>&, uint64_t);
 bool test_f2f(std::string, std::string, uint64_t);
+int Phase1(std::string infileName, std::vector<fileOffset>& offsetList, programOptions& options);
 
 void parseCLI(int argc, char* argv[], std::string& infile_name, std::string& atzfile_name, std::string& reconfile_name, programOptions& options){
     // Wrap everything in a try block.  Do this every time,
@@ -1200,7 +1201,25 @@ void doDeflate(unsigned char* next_in, uint64_t avail_in, unsigned char* next_ou
     }
 }
 
+int Phase1(std::string infileName, std::vector<fileOffset>& offsetList, programOptions& options){
+    //PHASE 1
+    //search the file for zlib headers, count them and create an offset list
+    uint64_t infileSize;
+	if (getFilesize(infileName, infileSize)!=0) return -1;//if opening the file fails, exit
+	std::cout<<"Input file size:"<<infileSize<<std::endl;
+    //try to guess the number of potential zlib headers in the file from the file size
+    //this value is purely empirical, may need tweaking
+	offsetList.reserve(static_cast<uint64_t>(infileSize/1912));
+	#ifdef debug
+        std::cout<<"Offset list initial capacity:"<<offsetList.capacity()<<std::endl;
+	#endif
+	searchFile(infileName, offsetList, options.chunksize);//search the file for zlib headers
+	std::cout<<"Total zlib headers found: "<<offsetList.size()<<std::endl;
+	return 0;
+}
+
 int main(int argc, char* argv[]){
+    std::cout<<"AntiZ "<<antiz_ver<<std::endl;
 	uint64_t i,j;
 	uint64_t infileSize;
 	std::ifstream infile;
@@ -1215,29 +1234,13 @@ int main(int argc, char* argv[]){
     uint64_t lastlen=0;
 
 	//PHASE 0
-    //parse CLI arguments, make sure the file name stings do not hold any uninitialized data
-    std::cout<<"AntiZ "<<antiz_ver<<std::endl;
-	infile_name.clear();
-	reconfile_name.clear();
-	atzfile_name.clear();
+    //parse CLI arguments
 	parseCLI(argc, argv, infile_name, atzfile_name, reconfile_name, options);//parse CLI arguments and if needed jump to reconstruction
     if (options.recon) goto PHASE5;
     #ifdef debug
         pauser();
     #endif // debug
-
-    //PHASE 1
-    //search the file for zlib headers, count them and create an offset list
-	if (getFilesize(infile_name, infileSize)!=0) return -1;//if opening the file fails, exit
-	std::cout<<"Input file size:"<<infileSize<<std::endl;
-    //try to guess the number of potential zlib headers in the file from the file size
-    //this value is purely empirical, may need tweaking
-	offsetList.reserve(static_cast<uint64_t>(infileSize/1912));
-	#ifdef debug
-        std::cout<<"Offset list initial capacity:"<<offsetList.capacity()<<std::endl;
-	#endif
-	searchFile(infile_name, offsetList, options.chunksize);//search the file for zlib headers
-	std::cout<<"Total zlib headers found: "<<offsetList.size()<<std::endl;
+    if (Phase1(infile_name, offsetList, options)!=0) return -1; //if PHASE 1 fails, exit
 	#ifdef debug
         pauser();
 	#endif // debug
