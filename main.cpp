@@ -295,6 +295,8 @@ uint64_t compare_buff2f(std::string fname, unsigned char buff[], uint64_t buffle
 bool test_f2f(std::string fname1, std::string fname2){
     //returns true if the files are identical
     uint64_t fsize1, fsize2, i;
+    fsize1=0;
+    fsize2=0;
     getFilesize(fname1, fsize1);
     getFilesize(fname2, fsize2);
     if (fsize1!=fsize2) return false;
