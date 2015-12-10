@@ -148,6 +148,7 @@ public:
 };
 
 inline void pauser();
+inline void pauser_debug();
 void parseCLI(int, char* [], std::string&, std::string&, std::string&, programOptions&);
 void searchBuffer(unsigned char [], std::vector<fileOffset>&, uint64_t, uint64_t);
 //bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, uint64_t& total_out);
@@ -249,6 +250,13 @@ void parseCLI(int argc, char* argv[], std::string& infile_name, std::string& atz
     }
 }
 
+inline void pauser_debug(){
+    #ifdef debug
+    std::string dummy;
+    std::cout << "Press enter to continue...";
+    std::getline(std::cin, dummy);
+    #endif // debug
+}
 inline void pauser(){
     std::string dummy;
     std::cout << "Press enter to continue...";
@@ -1237,13 +1245,9 @@ int main(int argc, char* argv[]){
     //parse CLI arguments
 	parseCLI(argc, argv, infile_name, atzfile_name, reconfile_name, options);//parse CLI arguments and if needed jump to reconstruction
     if (options.recon) goto PHASE5;
-    #ifdef debug
-        pauser();
-    #endif // debug
+    pauser_debug();
     if (Phase1(infile_name, offsetList, options)!=0) return -1; //if PHASE 1 fails, exit
-	#ifdef debug
-        pauser();
-	#endif // debug
+    pauser_debug();
 
     //PHASE 2
     //start trying to decompress at the collected offsets
@@ -1252,9 +1256,7 @@ int main(int argc, char* argv[]){
     std::cout<<"Valid zlib streams: "<<streamOffsetList.size()<<std::endl;
     offsetList.clear();//we only need the good offsets
     offsetList.shrink_to_fit();
-    #ifdef debug
-        pauser();
-    #endif // debug
+    pauser_debug();
 
     //PHASE 3
     //start trying to find the parameters to use for recompression
@@ -1264,9 +1266,7 @@ int main(int argc, char* argv[]){
         printStreaminfo_ALL(streamOffsetList, options.mismatchTol);
     #endif // debug
     std::cout<<"recompressed:"<<countRecomp(streamOffsetList)<<"/"<<streamOffsetList.size()<<std::endl;
-    #ifdef debug
-        pauser();
-    #endif // debug
+    pauser_debug();
 
     //PHASE 4
     //take the information created in phase 3 and use it to create an ATZ file
@@ -1274,92 +1274,85 @@ int main(int argc, char* argv[]){
     writeATZfile(infile_name, atzfile_name, streamOffsetList, options.chunksize);
     streamOffsetList.clear();
     streamOffsetList.shrink_to_fit();
-    #ifdef debug
-        pauser();
-    #endif // debug
+    pauser_debug();
 
     //PHASE 5: verify that we can reconstruct the original file, using only data from the ATZ file
     PHASE5:
     if (!options.notest){//dont reconstruct if we wont test it
-    uint64_t origlen=0;
-    uint64_t nstrms=0;
+        uint64_t origlen=0;
+        uint64_t nstrms=0;
 
-    if (parseATZheader(atzfile_name, origlen, nstrms)!=0) return -1;
+        if (parseATZheader(atzfile_name, origlen, nstrms)!=0) return -1;
 
-    if (nstrms>0){
-        streamOffsetList.reserve(nstrms);
-        //reead in all the info about the streams
-        uint64_t residueos=readStreamdesc_ALL(atzfile_name, streamOffsetList, nstrms);
-        uint64_t gapsum=0;
-        #ifdef debug
-        pauser();
-        #endif // debug
-        //do the reconstructing
-        uint64_t lastos=0;
-        lastlen=0;
-        std::ofstream recfile(reconfile_name, std::ios::out | std::ios::binary | std::ios::trunc);
-        //write the gap before the stream(if the is one), then do the compression using the parameters from the ATZ file
-        //then modify the compressed data according to the ATZ file(if necessary)
-        for(j=0;j<streamOffsetList.size();j++){
-            if ((lastos+lastlen)==streamOffsetList[j].offset){//no gap before the stream
-                #ifdef debug
-                std::cout<<"no gap before stream #"<<j<<std::endl;
-                #endif // debug
-            }else{
-                #ifdef debug
-                std::cout<<"gap of "<<(streamOffsetList[j].offset-(lastos+lastlen))<<" bytes before stream #"<<j<<std::endl;
-                #endif // debug
-                //copy the gap
-                copyto(recfile, atzfile_name, streamOffsetList[j].offset-(lastos+lastlen), residueos+gapsum, options.chunksize);
-                gapsum=gapsum+(streamOffsetList[j].offset-(lastos+lastlen));
-            }
-            #ifdef debug
-            std::cout<<"reconstructing stream #"<<j<<std::endl;
-            #endif // debug
-            //a buffer needs to be created to hold the decompressed and the compressed data
-            unsigned char* compBuffer= new unsigned char[streamOffsetList[j].streamLength+65535];
-            unsigned char* readBuff= new unsigned char[streamOffsetList[j].inflatedLength];
-            //read in the decompressed stream from ATZ file
-            read2buff(atzfile_name, readBuff, streamOffsetList[j].inflatedLength, streamOffsetList[j].atzInfos);
-            doDeflate(readBuff, streamOffsetList[j].inflatedLength, compBuffer, streamOffsetList[j].streamLength+65535, streamOffsetList[j].clevel, streamOffsetList[j].window, streamOffsetList[j].memlvl);
-            //do stream modification if needed
-            if (streamOffsetList[j].firstDiffByte>=0){
-                #ifdef debug
-                std::cout<<"   modifying "<<streamOffsetList[j].diffByteOffsets.size()<<" bytes"<<std::endl;
-                #endif // debug
-                uint64_t db=streamOffsetList[j].diffByteOffsets.size();
-                uint64_t sum=0;
-                for(i=0;i<db;i++){
-                    compBuffer[streamOffsetList[j].firstDiffByte+streamOffsetList[j].diffByteOffsets[i]+sum]=streamOffsetList[j].diffByteVal[i];
-                    sum=sum+streamOffsetList[j].diffByteOffsets[i];
+        if (nstrms>0){
+            streamOffsetList.reserve(nstrms);
+            //reead in all the info about the streams
+            uint64_t residueos=readStreamdesc_ALL(atzfile_name, streamOffsetList, nstrms);
+            uint64_t gapsum=0;
+            pauser_debug();
+            //do the reconstructing
+            uint64_t lastos=0;
+            lastlen=0;
+            std::ofstream recfile(reconfile_name, std::ios::out | std::ios::binary | std::ios::trunc);
+            //write the gap before the stream(if the is one), then do the compression using the parameters from the ATZ file
+            //then modify the compressed data according to the ATZ file(if necessary)
+            for(j=0;j<streamOffsetList.size();j++){
+                if ((lastos+lastlen)==streamOffsetList[j].offset){//no gap before the stream
+                    #ifdef debug
+                    std::cout<<"no gap before stream #"<<j<<std::endl;
+                    #endif // debug
+                }else{
+                    #ifdef debug
+                    std::cout<<"gap of "<<(streamOffsetList[j].offset-(lastos+lastlen))<<" bytes before stream #"<<j<<std::endl;
+                    #endif // debug
+                    //copy the gap
+                    copyto(recfile, atzfile_name, streamOffsetList[j].offset-(lastos+lastlen), residueos+gapsum, options.chunksize);
+                    gapsum=gapsum+(streamOffsetList[j].offset-(lastos+lastlen));
                 }
+                #ifdef debug
+                std::cout<<"reconstructing stream #"<<j<<std::endl;
+                #endif // debug
+                //a buffer needs to be created to hold the decompressed and the compressed data
+                unsigned char* compBuffer= new unsigned char[streamOffsetList[j].streamLength+65535];
+                unsigned char* readBuff= new unsigned char[streamOffsetList[j].inflatedLength];
+                //read in the decompressed stream from ATZ file
+                read2buff(atzfile_name, readBuff, streamOffsetList[j].inflatedLength, streamOffsetList[j].atzInfos);
+                doDeflate(readBuff, streamOffsetList[j].inflatedLength, compBuffer, streamOffsetList[j].streamLength+65535, streamOffsetList[j].clevel, streamOffsetList[j].window, streamOffsetList[j].memlvl);
+                //do stream modification if needed
+                if (streamOffsetList[j].firstDiffByte>=0){
+                    #ifdef debug
+                    std::cout<<"   modifying "<<streamOffsetList[j].diffByteOffsets.size()<<" bytes"<<std::endl;
+                    #endif // debug
+                    uint64_t db=streamOffsetList[j].diffByteOffsets.size();
+                    uint64_t sum=0;
+                    for(i=0;i<db;i++){
+                        compBuffer[streamOffsetList[j].firstDiffByte+streamOffsetList[j].diffByteOffsets[i]+sum]=streamOffsetList[j].diffByteVal[i];
+                        sum=sum+streamOffsetList[j].diffByteOffsets[i];
+                    }
+                }
+                recfile.write(reinterpret_cast<char*>(compBuffer), streamOffsetList[j].streamLength);
+                delete [] compBuffer;
+                delete [] readBuff;
+                lastos=streamOffsetList[j].offset;
+                lastlen=streamOffsetList[j].streamLength;
             }
-            recfile.write(reinterpret_cast<char*>(compBuffer), streamOffsetList[j].streamLength);
-            delete [] compBuffer;
-            delete [] readBuff;
-            lastos=streamOffsetList[j].offset;
-            lastlen=streamOffsetList[j].streamLength;
-        }
-        if ((lastos+lastlen)<origlen){
+            if ((lastos+lastlen)<origlen){
+                #ifdef debug
+                std::cout<<"copying "<<(origlen-(lastos+lastlen))<<" bytes to the end of the file"<<std::endl;
+                #endif // debug
+                //copy the end of the original file after the last stream to finish reconstruction
+                copyto(recfile, atzfile_name, origlen-(lastos+lastlen), residueos+gapsum, options.chunksize);
+            }
+            recfile.close();
+        }else{//if there are no recompressed streams
             #ifdef debug
-            std::cout<<"copying "<<(origlen-(lastos+lastlen))<<" bytes to the end of the file"<<std::endl;
+            std::cout<<"no recompressed streams in the ATZ file, copying "<<origlen<<" bytes"<<std::endl;
             #endif // debug
-            //copy the end of the original file after the last stream to finish reconstruction
-            copyto(recfile, atzfile_name, origlen-(lastos+lastlen), residueos+gapsum, options.chunksize);
+            std::ofstream recfile(reconfile_name, std::ios::out | std::ios::binary | std::ios::trunc);
+            copyto(recfile, atzfile_name, origlen, 28, options.chunksize);
+            recfile.close();
         }
-        recfile.close();
-    }else{//if there are no recompressed streams
-        #ifdef debug
-        std::cout<<"no recompressed streams in the ATZ file, copying "<<origlen<<" bytes"<<std::endl;
-        #endif // debug
-        std::ofstream recfile(reconfile_name, std::ios::out | std::ios::binary | std::ios::trunc);
-        copyto(recfile, atzfile_name, origlen, 28, options.chunksize);
-        recfile.close();
-    }
-
-    #ifdef debug
-    pauser();
-    #endif // debug
+        pauser_debug();
     }
 
     //PHASE 6: verify that the reconstructed file is identical to the original
@@ -1381,9 +1374,7 @@ int main(int argc, char* argv[]){
             abort();
         }
         std::cout<<"OK!"<<std::endl;
-        #ifdef debug
-        pauser();
-        #endif // debug
+        pauser_debug();
         if (remove(reconfile_name.c_str())!=0){//delete the reconstructed file since it was only needed for testing
             std::cout<<"error: cannot delete recfile";
             abort();
