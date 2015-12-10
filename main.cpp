@@ -476,7 +476,7 @@ void findDeflateParams_stream(unsigned char rBuffer[], unsigned char decompBuffe
 }
 
 void findDeflateParams_ALL(std::vector<streamOffset>& streamOffsetList, std::string infile_name){
-    //this function takes a buffer and a vector containing information about the valid zlib streams in the buffer
+    //this function takes a filename and a vector containing information about the valid zlib streams in the file
     //it tries to find the best parameters for recompression, the results are stored in the vector
     uint64_t i;
     uint64_t numOffsets=streamOffsetList.size();
