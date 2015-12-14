@@ -174,6 +174,11 @@ void printStreaminfo_ALL(std::vector<streamOffset>&, uint_fast16_t);
 uint64_t readStreamdesc_ALL(std::string, std::vector<streamOffset>&, uint64_t);
 bool test_f2f(std::string, std::string, uint64_t);
 int Phase1(std::string infileName, std::vector<fileOffset>& offsetList, programOptions& options);
+void Phase2(std::string infileName, std::vector<fileOffset>& offsetList, std::vector<streamOffset>& streamOffsetList, programOptions& options);
+void Phase3(std::string infileName, std::vector<streamOffset>& streamOffsetList, programOptions& options);
+void Phase4(std::string infileName, std::string atzfileName, std::vector<streamOffset>& streamOffsetList, programOptions& options);
+int Phase5(std::string atzfile_name, std::string reconfile_name, std::vector<streamOffset>& streamOffsetList, programOptions& options);
+int Phase6(std::string infile_name, std::string reconfile_name, programOptions& options);
 
 void parseCLI(int argc, char* argv[], std::string& infile_name, std::string& atzfile_name, std::string& reconfile_name, programOptions& options){
     // Wrap everything in a try block.  Do this every time,
@@ -1226,58 +1231,41 @@ int Phase1(std::string infileName, std::vector<fileOffset>& offsetList, programO
 	return 0;
 }
 
-int main(int argc, char* argv[]){
-    std::cout<<"AntiZ "<<antiz_ver<<std::endl;
-	uint64_t i,j;
-	uint64_t infileSize;
-	std::ifstream infile;
-	std::ofstream outfile;
-	std::string infile_name;
-	std::string atzfile_name;
-	std::string reconfile_name;
-	std::vector<fileOffset> offsetList;//offsetList stores memory offsets where potential headers can be found, and the type of the offset
-	std::vector<streamOffset> streamOffsetList;//streamOffsetList stores offsets of confirmed zlib streams and a bunch of data on them
-	programOptions options;
-
-    uint64_t lastlen=0;
-
-	//PHASE 0
-    //parse CLI arguments
-	parseCLI(argc, argv, infile_name, atzfile_name, reconfile_name, options);//parse CLI arguments and if needed jump to reconstruction
-    if (options.recon) goto PHASE5;
-    pauser_debug();
-    if (Phase1(infile_name, offsetList, options)!=0) return -1; //if PHASE 1 fails, exit
-    pauser_debug();
-
+void Phase2(std::string infileName, std::vector<fileOffset>& offsetList, std::vector<streamOffset>& streamOffsetList, programOptions& options){
     //PHASE 2
     //start trying to decompress at the collected offsets
     //test all offsets found in phase 1
-    testOffsetList_chunked(infile_name, offsetList, streamOffsetList, options.chunksize);
+    testOffsetList_chunked(infileName, offsetList, streamOffsetList, options.chunksize);
     std::cout<<"Valid zlib streams: "<<streamOffsetList.size()<<std::endl;
     offsetList.clear();//we only need the good offsets
     offsetList.shrink_to_fit();
-    pauser_debug();
+}
 
+void Phase3(std::string infileName, std::vector<streamOffset>& streamOffsetList, programOptions& options){
     //PHASE 3
     //start trying to find the parameters to use for recompression
-    findDeflateParams_ALL(streamOffsetList, infile_name, options);
+    findDeflateParams_ALL(streamOffsetList, infileName, options);
     std::cout<<std::endl;
     #ifdef debug
         printStreaminfo_ALL(streamOffsetList, options.mismatchTol);
     #endif // debug
     std::cout<<"recompressed:"<<countRecomp(streamOffsetList)<<"/"<<streamOffsetList.size()<<std::endl;
-    pauser_debug();
+}
 
+void Phase4(std::string infileName, std::string atzfileName, std::vector<streamOffset>& streamOffsetList, programOptions& options){
     //PHASE 4
     //take the information created in phase 3 and use it to create an ATZ file
     //currently ATZ1 is in use, no specifications yet, and will be deprecated when ATZ2 comes
-    writeATZfile(infile_name, atzfile_name, streamOffsetList, options.chunksize);
+    writeATZfile(infileName, atzfileName, streamOffsetList, options.chunksize);
     streamOffsetList.clear();
     streamOffsetList.shrink_to_fit();
-    pauser_debug();
+}
 
+int Phase5(std::string atzfile_name, std::string reconfile_name, std::vector<streamOffset>& streamOffsetList, programOptions& options){
     //PHASE 5: verify that we can reconstruct the original file, using only data from the ATZ file
-    PHASE5:
+    //PHASE5:
+    uint64_t i,j;
+    uint64_t lastlen=0;
     if (!options.notest){//dont reconstruct if we wont test it
         uint64_t origlen=0;
         uint64_t nstrms=0;
@@ -1352,12 +1340,15 @@ int main(int argc, char* argv[]){
             copyto(recfile, atzfile_name, origlen, 28, options.chunksize);
             recfile.close();
         }
-        pauser_debug();
     }
+    return 0;
+}
 
+int Phase6(std::string infile_name, std::string reconfile_name, programOptions& options){
     //PHASE 6: verify that the reconstructed file is identical to the original
     if((!options.recon)&&(!options.notest)){//if we are just reconstructing we dont have the original file
-        uint64_t recfileSize;
+        uint64_t infileSize=0;
+        uint64_t recfileSize=0;
         std::cout<<"Testing...";
         getFilesize(infile_name, infileSize);
         getFilesize(reconfile_name, recfileSize);
@@ -1367,18 +1358,55 @@ int main(int argc, char* argv[]){
         #endif // debug
         if(infileSize!=recfileSize){
             std::cout<<"error: size mismatch";
-            abort();
+            return -1;
         }
         if (!test_f2f(infile_name, reconfile_name, options.chunksize)){
             std::cout<<"error: byte mismatch";
-            abort();
+            return -2;
         }
         std::cout<<"OK!"<<std::endl;
-        pauser_debug();
         if (remove(reconfile_name.c_str())!=0){//delete the reconstructed file since it was only needed for testing
             std::cout<<"error: cannot delete recfile";
-            abort();
+            return -3;
         }
     }
+    return 0;
+}
+
+int main(int argc, char* argv[]){
+    std::cout<<"AntiZ "<<antiz_ver<<std::endl;
+	std::ifstream infile;
+	std::ofstream outfile;
+	std::string infile_name;
+	std::string atzfile_name;
+	std::string reconfile_name;
+	std::vector<fileOffset> offsetList;//offsetList stores memory offsets where potential headers can be found, and the type of the offset
+	std::vector<streamOffset> streamOffsetList;//streamOffsetList stores offsets of confirmed zlib streams and a bunch of data on them
+	programOptions options;
+
+	//PHASE 0
+    //parse CLI arguments
+	parseCLI(argc, argv, infile_name, atzfile_name, reconfile_name, options);//parse CLI arguments and if needed jump to reconstruction
+	pauser_debug();
+
+    if (!options.recon){
+        if (Phase1(infile_name, offsetList, options)!=0) return -1; //if PHASE 1 fails, exit
+        pauser_debug();
+
+        Phase2(infile_name, offsetList, streamOffsetList, options);
+        pauser_debug();
+
+        Phase3(infile_name, streamOffsetList, options);
+        pauser_debug();
+
+        Phase4(infile_name, atzfile_name, streamOffsetList, options);
+        pauser_debug();
+    }
+
+    if (Phase5(atzfile_name, reconfile_name, streamOffsetList, options)!=0) return -1; //if PHASE 5 fails, exit
+    pauser_debug();
+
+    if (Phase6(infile_name, reconfile_name, options)!=0) return -1; //if PHASE 6 fails, exit
+    pauser_debug();
 	return 0;
 }
