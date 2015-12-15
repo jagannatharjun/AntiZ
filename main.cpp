@@ -179,6 +179,7 @@ int Phase1(std::string infileName, std::vector<fileOffset>& offsetList, programO
 void Phase2(std::string infileName, std::vector<fileOffset>& offsetList, std::vector<streamOffset>& streamOffsetList, programOptions& options);
 void Phase3(std::string infileName, std::vector<streamOffset>& streamOffsetList, programOptions& options);
 void Phase4(std::string infileName, std::string atzfileName, std::vector<streamOffset>& streamOffsetList, programOptions& options);
+void deltaEncode(std::vector<uint64_t>& invec, streamOffset& streamobj);
 
 void parseCLI(int argc, char* argv[], std::string& infile_name, std::string& atzfile_name, std::string& reconfile_name, programOptions& options){
     // Wrap everything in a try block.  Do this every time,
@@ -535,6 +536,14 @@ void findDeflateParams_ALL(std::vector<streamOffset>& streamOffsetList, std::str
     }
 }
 
+void deltaEncode(std::vector<uint64_t>& invec, streamOffset& streamobj){
+    streamobj.firstDiffByte=invec[0];
+    streamobj.diffByteOffsets.push_back(0);
+    for (uint64_t i=1; i<invec.size(); i++){
+        streamobj.diffByteOffsets.push_back(invec[i]-invec[i-1]);
+    }
+}
+
 bool testDeflateParams(unsigned char origstream[], unsigned char decompbuff[], streamOffset& streamobj,
                         uint8_t clevel, uint8_t window, uint8_t memlevel, programOptions& options){
     //tests if the supplied deflate params(clevel, memlevel, window) are better for recompressing the given streamoffset
@@ -626,54 +635,36 @@ bool testDeflateParams(unsigned char origstream[], unsigned char decompbuff[], s
                 streamobj.firstDiffByte=-1;
                 streamobj.diffByteOffsets.clear();
                 streamobj.diffByteVal.clear();
-                uint64_t last_i=0;
                 if (identBytes==streamobj.streamLength){//if we have a full match set the flag to bail from the nested loops
                     #ifdef debug
                     std::cout<<"   recompression succesful, full match"<<std::endl;
                     #endif // debug
                     fullmatch=true;
-                } else {//there are different bytes and/or bytes at the end
+                }else{//there are different bytes and/or bytes at the end
+                    std::vector<uint64_t> rawdiff;
                     if (identBytes+options.mismatchTol>=streamobj.streamLength) fullmatch=true;//if at most mismatchTol bytes diff bail from the loop
-                        for (i=0; i<smaller;i++){//diff it
-                            if (recompBuffer[i]!=origstream[i]){//if a mismatching byte is found
-                                if (streamobj.firstDiffByte<0){//if the first different byte is negative, then this is the first
-                                    streamobj.firstDiffByte=(i);
-                                    streamobj.diffByteOffsets.push_back(0);
-                                    streamobj.diffByteVal.push_back(origstream[i]);
-                                    #ifdef debug
-                                    std::cout<<"   first diff byte:"<<i<<std::endl;
-                                    #endif // debug
-                                    last_i=i;
-                                } else {
-                                    streamobj.diffByteOffsets.push_back(i-last_i);
-                                    streamobj.diffByteVal.push_back(origstream[i]);
-                                    //cout<<"   different byte:"<<i<<endl;
-                                    last_i=i;
-                                }
-                            }
-                        }
-                        if (strm.total_out<streamobj.streamLength){//if the recompressed stream is shorter we need to add bytes after diffing
-                            for (i=0; i<(streamobj.streamLength-strm.total_out); i++){//adding bytes
-                                if ((i==0)&&((last_i+1)<strm.total_out)){//if the last byte of the recompressed stream was a match
-                                    streamobj.diffByteOffsets.push_back(strm.total_out-last_i);
-                                } else{
-                                    streamobj.diffByteOffsets.push_back(1);
-                                }
-                                streamobj.diffByteVal.push_back(origstream[(i+strm.total_out)]);
-                                #ifdef debug
-                                std::cout<<"   byte at the end added :"<<+origstream[(i+strm.total_out)]<<std::endl;
-                                #endif // debug
-                            }
+                    for (i=0; i<smaller;i++){//diff it
+                        if (recompBuffer[i]!=origstream[i]){//if a mismatching byte is found
+                            rawdiff.push_back(i);
+                            streamobj.diffByteVal.push_back(origstream[i]);
                         }
                     }
+                    if (strm.total_out<streamobj.streamLength){//if the recompressed stream is shorter we need to add bytes after diffing
+                        for (i=strm.total_out; i<streamobj.streamLength; i++){//adding bytes
+                            rawdiff.push_back(i);
+                            streamobj.diffByteVal.push_back(origstream[i]);
+                        }
+                    }
+                    deltaEncode(rawdiff, streamobj);
                 }
             }
-            #ifdef debug
-            else{
-                std::cout<<"   size difference is greater than "<<options.sizediffTresh<<" bytes, not comparing"<<std::endl;
-            }
-            #endif // debug
         }
+        #ifdef debug
+        else{
+            std::cout<<"   size difference is greater than "<<options.sizediffTresh<<" bytes, not comparing"<<std::endl;
+        }
+        #endif // debug
+    }
     ret=deflateEnd(&strm);
     if ((ret != Z_OK)&&!((ret==Z_DATA_ERROR) && (!doFullStream))){//Z_DATA_ERROR is only acceptable if we skipped the full recompression
         std::cout<<"deflateEnd() failed with exit code:"<<ret<<std::endl;//should never happen normally
