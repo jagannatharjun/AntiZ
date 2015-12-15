@@ -174,6 +174,7 @@ void printStreaminfo_ALL(std::vector<streamOffset>&, uint_fast16_t);
 uint64_t readStreamdesc_ALL(std::string, std::vector<streamOffset>&, uint64_t);
 bool test_f2f(std::string, std::string, uint64_t);
 int reconstructATZ(std::string atzfileName, std::string reconfileName, uint64_t chunksize);
+int testATZfile(std::string infileName, std::string atzfileName, std::string reconfileName, uint64_t chunksize);
 int Phase1(std::string infileName, std::vector<fileOffset>& offsetList, programOptions& options);
 void Phase2(std::string infileName, std::vector<fileOffset>& offsetList, std::vector<streamOffset>& streamOffsetList, programOptions& options);
 void Phase3(std::string infileName, std::vector<streamOffset>& streamOffsetList, programOptions& options);
