@@ -5,6 +5,8 @@
 #include <tclap/CmdLine.h>
 #define antiz_ver "0.1.5-git"
 
+inline int getFilesize(std::string, uint64_t&);
+
 class programOptions{
 public:
     //parameters that some users may want to tweak
@@ -147,12 +149,117 @@ public:
     uint64_t atzInfos;
 };
 
+class ATZprocess{
+public:
+    void Phase0(std::string ifname, std::string atzname, std::string recname, programOptions opt){
+        infileName=ifname;
+        atzfileName=atzname;
+        reconfileName=recname;
+        options=opt;
+        processState=0;
+    }
+    int Phase1(){
+        //PHASE 1
+        //search the file for zlib headers, count them and create an offset list
+        if (processState!=0) return -2;
+        if (getFilesize(infileName, infileSize)!=0) return -1;//if opening the file fails, exit
+        std::cout<<"Input file size:"<<infileSize<<std::endl;
+        //try to guess the number of potential zlib headers in the file from the file size
+        //this value is purely empirical, may need tweaking
+        fileOffsetList.reserve(static_cast<uint64_t>(infileSize/1912));
+        #ifdef debug
+            std::cout<<"Offset list initial capacity:"<<offsetList.capacity()<<std::endl;
+        #endif
+        if (infileSize>options.chunksize){
+            searchInfile(options.chunksize);//search the file for zlib headers
+        }else{
+            searchInfile(infileSize+1);//the +1 makes sure we get eof and skip the while loop
+        }
+        std::cout<<"Total zlib headers found: "<<fileOffsetList.size()<<std::endl;
+        processState=1;
+        return 0;
+    }
+private:
+    std::string infileName;
+	std::string atzfileName;
+	std::string reconfileName;
+    std::vector<fileOffset> fileOffsetList;//offsetList stores memory offsets where potential headers can be found, and the type of the offset
+	std::vector<streamOffset> streamOffsetList;//streamOffsetList stores offsets of confirmed zlib streams and a bunch of data on them
+	programOptions options;
+	int processState=-1;
+	uint64_t infileSize;
+
+	void searchInfile(uint64_t buffsize){
+        //open a file and search it for possible Zlib headers
+        //all information about them is pushed into a vector
+        std::ifstream f;
+        uint64_t i;
+        unsigned char* rBuffer;
+        f.open(infileName, std::ios::in | std::ios::binary);//open the input file
+        rBuffer = new unsigned char[buffsize];
+        memset(rBuffer, 0, buffsize);
+        f.read(reinterpret_cast<char*>(rBuffer), buffsize);
+        searchBuffer(rBuffer, buffsize);//do the 0-th chunk
+        i=1;
+        while (!f.eof()){//read in and process the file until the end of file
+            memset(rBuffer, 0, buffsize);//the buffer needs to be zeroed out, or the last chunk will cause a crash
+            f.seekg(-1, f.cur);//seek back one byte because the last byte in the previous chunk never gets parsed
+            f.read(reinterpret_cast<char*>(rBuffer), buffsize);
+            searchBuffer(rBuffer, buffsize, (i*buffsize-i));
+            i++;
+        }
+        f.close();
+        delete [] rBuffer;
+    }
+
+    void searchBuffer(unsigned char buffer[], uint64_t buffLen, uint64_t chunkOffset=0){
+        //this function searches a buffer for zlib headers, count them and fill a vector of fileOffsets
+        //chunkOffset is used if the input buffer is just a chunk of a bigger set of data (eg. a file that does not fit into RAM)
+        //a new variable is used so the substraction is only performed once, not every time it loops
+        //it is pointless to test the last byte and it could cause and out of bounds read
+        uint64_t redlen=buffLen-1;
+        for(uint64_t i=0;i<redlen;i++){
+            //search for 7801, 785E, 789C, 78DA, 68DE, 6881, 6843, 6805, 58C3, 5885, 5847, 5809,
+            //           48C7, 4889, 484B, 480D, 38CB, 388D, 384F, 3811, 28CF, 2891, 2853, 2815
+            int header = ((int)buffer[i]) * 256 + (int)buffer[i + 1];
+            int offsetType = parseOffsetType(header);
+            if (offsetType >= 0){
+                #ifdef debug
+                    std::cout << "Zlib header 0x" << std::hex << std::setfill('0') << std::setw(4) << header << std::dec
+                      << " with " << (1 << ((header >> 12) - 2)) << "K window at offset: " << (i+chunkOffset) << std::endl;
+                #endif // debug
+                fileOffsetList.push_back(fileOffset(i+chunkOffset, offsetType));
+            }
+        }
+        #ifdef debug
+            std::cout<<std::endl;
+        #endif // debug
+    }
+
+    int parseOffsetType(int header){
+        // A zlib stream has the following structure: (http://tools.ietf.org/html/rfc1950)
+        //  +---+---+   CMF: bits 0 to 3  CM      Compression method (8 = deflate)
+        //  |CMF|FLG|        bits 4 to 7  CINFO   Compression info (base-2 logarithm of the LZ77 window size minus 8)
+        //  +---+---+
+        //              FLG: bits 0 to 4  FCHECK  Check bits for CMF and FLG (in MSB order (CMF*256 + FLG) is a multiple of 31)
+        //                   bit  5       FDICT   Preset dictionary
+        //                   bits 6 to 7  FLEVEL  Compression level (0 = fastest, 1 = fast, 2 = default, 3 = maximum)
+        switch (header){
+            case 0x2815 : return 0;  case 0x2853 : return 1;  case 0x2891 : return 2;  case 0x28cf : return 3;
+            case 0x3811 : return 4;  case 0x384f : return 5;  case 0x388d : return 6;  case 0x38cb : return 7;
+            case 0x480d : return 8;  case 0x484b : return 9;  case 0x4889 : return 10; case 0x48c7 : return 11;
+            case 0x5809 : return 12; case 0x5847 : return 13; case 0x5885 : return 14; case 0x58c3 : return 15;
+            case 0x6805 : return 16; case 0x6843 : return 17; case 0x6881 : return 18; case 0x68de : return 19;
+            case 0x7801 : return 20; case 0x785e : return 21; case 0x789c : return 22; case 0x78da : return 23;
+            default: return -1;
+        }
+    }
+};
+
 inline void pauser();
 inline void pauser_debug();
 void parseCLI(int, char* [], std::string&, std::string&, std::string&, programOptions&);
 void searchBuffer(unsigned char [], std::vector<fileOffset>&, uint64_t, uint64_t);
-//bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, uint64_t& total_out);
-//void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets);
 int parseOffsetType(int);
 int doInflate(unsigned char*, uint64_t, unsigned char*, uint64_t);
 void doDeflate(unsigned char*, uint64_t, unsigned char*, uint64_t, uint8_t, uint8_t, uint8_t);
@@ -160,7 +267,6 @@ bool testDeflateParams(unsigned char [], unsigned char [], streamOffset&, uint8_
 void findDeflateParams_ALL(std::vector<streamOffset>&, std::string, programOptions&);
 inline bool testParamRange(unsigned char [], unsigned char [], streamOffset&, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, uint8_t, programOptions&);
 void searchFile(std::string, std::vector<fileOffset>&, uint64_t);
-inline int getFilesize(std::string, uint64_t&);
 void testOffsetList_chunked(std::string, std::vector<fileOffset>&, std::vector<streamOffset>&, uint64_t);
 inline int CheckOffset_chunked(z_stream&, uint64_t);
 int inflate_f2f(std::string, std::string, uint64_t, uint64_t);
@@ -701,6 +807,7 @@ int doInflate(unsigned char* next_in, uint64_t avail_in, unsigned char* next_out
     return ret2;
 }
 
+int parseOffsetType(int header){
 // A zlib stream has the following structure: (http://tools.ietf.org/html/rfc1950)
 //  +---+---+   CMF: bits 0 to 3  CM      Compression method (8 = deflate)
 //  |CMF|FLG|        bits 4 to 7  CINFO   Compression info (base-2 logarithm of the LZ77 window size minus 8)
@@ -708,7 +815,6 @@ int doInflate(unsigned char* next_in, uint64_t avail_in, unsigned char* next_out
 //              FLG: bits 0 to 4  FCHECK  Check bits for CMF and FLG (in MSB order (CMF*256 + FLG) is a multiple of 31)
 //                   bit  5       FDICT   Preset dictionary
 //                   bits 6 to 7  FLEVEL  Compression level (0 = fastest, 1 = fast, 2 = default, 3 = maximum)
-int parseOffsetType(int header){
     switch (header){
         case 0x2815 : return 0;  case 0x2853 : return 1;  case 0x2891 : return 2;  case 0x28cf : return 3;
         case 0x3811 : return 4;  case 0x384f : return 5;  case 0x388d : return 6;  case 0x38cb : return 7;
@@ -841,85 +947,6 @@ void testOffsetList_chunked(std::string fname, std::vector<fileOffset>& fileoffs
     }
     std::cout<<std::endl;
 }
-
-/*bool CheckOffset(unsigned char *next_in, uint64_t avail_in, uint64_t& total_in, uint64_t& total_out){
-    //OLD CODE
-    //this function checks if there is a valid zlib stream at next_in
-    //if yes, then return with true and set the total_in and total_out variables to the deflated and inflated length of the stream
-	z_stream strm;
-    strm.zalloc=Z_NULL;
-    strm.zfree=Z_NULL;
-    strm.opaque=Z_NULL;
-    bool success=false;
-    uint64_t memScale=1;
-
-    while (true){
-		strm.avail_in=avail_in;
-		strm.next_in=next_in;
-		//initialize the stream for decompression and check for error
-		int ret=inflateInit(&strm);
-		if (ret != Z_OK){
-			std::cout<<"inflateInit() failed with exit code:"<<ret<<std::endl;
-			abort();
-		}
-        //a buffer needs to be created to hold the resulting decompressed data
-        //this is a big problem since the zlib header does not contain the length of the decompressed data
-        //the best we can do is to take a guess, and see if it was big enough, if not then scale it up
-        unsigned char* decompBuffer= new unsigned char[(memScale*5*avail_in)]; //just a wild guess, corresponds to a compression ratio of 20%
-        strm.next_out=decompBuffer;
-        strm.avail_out=memScale*5*avail_in;
-        ret=inflate(&strm, Z_FINISH);//try to do the actual decompression in one pass
-        if (ret==Z_STREAM_END && strm.total_in>=16)//decompression was succesful
-        {
-            total_in=strm.total_in;
-			total_out=strm.total_out;
-            success=true;
-        }
-        //deallocate the zlib stream, check for errors and deallocate the decompression buffer
-        if (inflateEnd(&strm)!=Z_OK){
-			std::cout<<"inflateEnd() failed in CheckOffset"<<std::endl;//should never happen normally
-            abort();
-        }
-        delete [] decompBuffer;
-        if (ret!=Z_BUF_ERROR) break;
-        memScale++;//increase buffer size for the next iteration
-    };
-    return success;
-}
-
-void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOffset>& fileoffsets, std::vector<streamOffset>& streamoffsets){
-    //OLD CODE
-    //this function takes a vector of fileOffsets, a buffer of bufflen length and tests if the offsets in the fileOffset vector
-    //are marking the beginnings of valid zlib streams
-    //the offsets, types, lengths and inflated lengths of valid zlib streams are pushed to a vector of streamOffsets
-	uint64_t numOffsets=fileoffsets.size();
-	uint64_t lastGoodOffset=0;
-	uint64_t lastStreamLength=0;
-	uint64_t i;
-    for (i=0; i<numOffsets; i++){
-        //if the current offset is known to be part of the last stream it is pointless to check it
-        if ((lastGoodOffset+lastStreamLength)<=fileoffsets[i].offset){
-            //since we have no idea about the length of the zlib stream, take the worst case, i.e. everything after the header belongs to the stream
-            uint64_t inbytes, outbytes;
-            inbytes=0;
-            outbytes=0;
-            if (CheckOffset((buffer+fileoffsets[i].offset), (bufflen-fileoffsets[i].offset), inbytes, outbytes)){
-                lastGoodOffset=fileoffsets[i].offset;
-                lastStreamLength=inbytes;
-                streamoffsets.push_back(streamOffset(fileoffsets[i].offset, fileoffsets[i].offsetType, inbytes, outbytes));
-                #ifdef debug
-                std::cout<<"Offset #"<<i<<" ("<<fileoffsets[i].offset<<") decompressed, "<<inbytes<<" bytes to "<<outbytes<<" bytes"<<std::endl;
-                #endif // debug
-            }
-        }
-        #ifdef debug
-        else{
-            std::cout<<"skipping offset #"<<i<<" ("<<fileoffsets[i].offset<<") because it cannot be a header"<<std::endl;
-        }
-        #endif // debug
-    }
-    std::cout<<std::endl;
-}*/
 
 void searchFile(std::string fname, std::vector<fileOffset>& fileoffsets, uint64_t buffsize){
     //open a file and search it for possible Zlib headers
