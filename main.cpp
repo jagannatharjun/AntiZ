@@ -921,7 +921,7 @@ void testOffsetList(unsigned char buffer[], uint64_t bufflen, std::vector<fileOf
     std::cout<<std::endl;
 }*/
 
-void searchFile(std::string fname, std::vector<fileOffset>& fileoffsets, uint64_t chunksize){
+void searchFile(std::string fname, std::vector<fileOffset>& fileoffsets, uint64_t buffsize){
     //open a file and search it for possible Zlib headers
     //all information about them is pushed into a vector
     std::ifstream f;
@@ -929,16 +929,16 @@ void searchFile(std::string fname, std::vector<fileOffset>& fileoffsets, uint64_
     unsigned char* rBuffer;
 
 	f.open(fname, std::ios::in | std::ios::binary);//open the input file
-    rBuffer = new unsigned char[chunksize];
-    memset(rBuffer, 0, chunksize);
-    f.read(reinterpret_cast<char*>(rBuffer), chunksize);
-    searchBuffer(rBuffer, fileoffsets, chunksize);//do the 0-th chunk
+    rBuffer = new unsigned char[buffsize];
+    memset(rBuffer, 0, buffsize);
+    f.read(reinterpret_cast<char*>(rBuffer), buffsize);
+    searchBuffer(rBuffer, fileoffsets, buffsize);//do the 0-th chunk
     i=1;
     while (!f.eof()){//read in and process the file until the end of file
-        memset(rBuffer, 0, chunksize);//the buffer needs to be zeroed out, or the last chunk will cause a crash
+        memset(rBuffer, 0, buffsize);//the buffer needs to be zeroed out, or the last chunk will cause a crash
         f.seekg(-1, f.cur);//seek back one byte because the last byte in the previous chunk never gets parsed
-        f.read(reinterpret_cast<char*>(rBuffer), chunksize);
-        searchBuffer(rBuffer, fileoffsets, chunksize, (i*chunksize-i));
+        f.read(reinterpret_cast<char*>(rBuffer), buffsize);
+        searchBuffer(rBuffer, fileoffsets, buffsize, (i*buffsize-i));
         i++;
     }
 	f.close();
@@ -1215,7 +1215,11 @@ int Phase1(std::string infileName, std::vector<fileOffset>& offsetList, programO
 	#ifdef debug
         std::cout<<"Offset list initial capacity:"<<offsetList.capacity()<<std::endl;
 	#endif
-	searchFile(infileName, offsetList, options.chunksize);//search the file for zlib headers
+	if (infileSize>options.chunksize){
+        searchFile(infileName, offsetList, options.chunksize);//search the file for zlib headers
+	}else{
+        searchFile(infileName, offsetList, infileSize+1);//the +1 makes sure we get eof and skip the while loop
+    }
 	std::cout<<"Total zlib headers found: "<<offsetList.size()<<std::endl;
 	return 0;
 }
