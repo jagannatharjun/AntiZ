@@ -137,10 +137,10 @@ public:
     uint64_t atzInfos;
 };
 
-class ATZprocess{
+class ATZcreator{
 public:
-    ATZprocess()=delete;
-    ATZprocess(std::string ifname, std::string atzname, std::string recname, programOptions opt){
+    ATZcreator()=delete;
+    ATZcreator(std::string ifname, std::string atzname, std::string recname, programOptions opt){
         infileName=ifname;
         atzfileName=atzname;
         reconfileName=recname;
@@ -187,7 +187,7 @@ public:
         findDeflateParams_ALL();
         std::cout<<std::endl;
         #ifdef debug
-            printStreaminfo_ALL(streamOffsetList, options.mismatchTol);
+            printStreaminfo_ALL(options.mismatchTol);
         #endif // debug
         std::cout<<"recompressed:"<<countRecomp()<<"/"<<streamOffsetList.size()<<std::endl;
         processingState=3;
@@ -901,6 +901,31 @@ private: //private section of ATZprocess
         infile.read(reinterpret_cast<char*>(buff), bufflen);
         infile.close();
     }
+    void printStreaminfo_ALL(uint_fast16_t mismatchTol){
+        uint64_t i,j, numFullmatch=0;
+        std::cout<<"Stream info"<<std::endl;
+        for (j=0; j<streamOffsetList.size(); j++){
+            std::cout<<"-------------------------"<<std::endl;
+            std::cout<<"   stream #"<<j<<std::endl;
+            std::cout<<"   offset:"<<streamOffsetList[j].offset<<std::endl;
+            std::cout<<"   memlevel:"<<+streamOffsetList[j].memlvl<<std::endl;
+            std::cout<<"   clevel:"<<+streamOffsetList[j].clevel<<std::endl;
+            std::cout<<"   window:"<<+streamOffsetList[j].window<<std::endl;
+            std::cout<<"   best match:"<<streamOffsetList[j].identBytes<<" out of "<<streamOffsetList[j].streamLength<<std::endl;
+            std::cout<<"   diffBytes:"<<streamOffsetList[j].diffByteOffsets.size()<<std::endl;
+            std::cout<<"   diffVals:"<<streamOffsetList[j].diffByteVal.size()<<std::endl;
+            std::cout<<"   mismatched bytes:";
+            for (i=0; i<streamOffsetList[j].diffByteOffsets.size(); i++){
+                std::cout<<streamOffsetList[j].diffByteOffsets[i]<<";";
+            }
+            std::cout<<std::endl;
+        }
+        std::cout<<"-------------------------"<<std::endl;
+        for (j=0; j<streamOffsetList.size(); j++){
+            if (((streamOffsetList[j].streamLength-streamOffsetList[j].identBytes)<=mismatchTol)&&(streamOffsetList[j].identBytes>0)) numFullmatch++;
+        }
+        std::cout<<"fullmatch streams:"<<numFullmatch<<" out of "<<streamOffsetList.size()<<std::endl;
+    }
 };
 
 inline void pauser_debug();
@@ -1294,11 +1319,11 @@ int main(int argc, char* argv[]){
     pauser_debug();
 
     if (!options.recon){
-        ATZprocess proc(infile_name, atzfile_name, reconfile_name, options);
-        if (proc.Phase1()!=0) return -1;
-        if (proc.Phase2()!=0) return -1;
-        if (proc.Phase3()!=0) return -1;
-        if (proc.Phase4()!=0) return -1;
+        ATZcreator createATZ(infile_name, atzfile_name, reconfile_name, options);
+        if (createATZ.Phase1()!=0) return -1;
+        if (createATZ.Phase2()!=0) return -1;
+        if (createATZ.Phase3()!=0) return -1;
+        if (createATZ.Phase4()!=0) return -1;
         if (!options.notest){
             if (testATZfile(infile_name, atzfile_name, reconfile_name, options.chunksize)!=0) return -1;
             pauser_debug();
