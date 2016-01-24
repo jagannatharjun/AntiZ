@@ -349,7 +349,7 @@ private: //private section of ATZprocess
             if ((lastGoodOffset+lastStreamLength)<=fileOffsetList[i].offset){//if the current offset is known to be part of the last stream it is pointless to check it
                 //read in the first chunk
                 //since we have no idea about the length of the zlib stream, take the worst case, i.e. everything after the header belongs to the stream
-                if (fileOffsetList[i].offset<(infile.buffstart+buffsize-15)){//if the first 16 bytes of the current stream is already in the buffer
+                if ((fileOffsetList[i].offset>=infile.buffstart)&&(fileOffsetList[i].offset<(infile.buffstart+buffsize-15))){//if the first 16 bytes of the current stream is already in the buffer
                     strm.next_in=infile.buff+(fileOffsetList[i].offset-infile.buffstart);
                     strm.avail_in=buffsize-(fileOffsetList[i].offset-infile.buffstart);
                 } else {
@@ -1184,6 +1184,7 @@ int main(int argc, char* argv[]){
     if (!options.recon){
         ATZcreator createATZ(infile_name, atzfile_name, reconfile_name, options);
         if (createATZ.Phase1()!=0) return -1;
+        ATZutil::pauser_debug();
         if (createATZ.Phase2()!=0) return -1;
         if (createATZ.Phase3()!=0) return -1;
         if (createATZ.Phase4()!=0) return -1;
