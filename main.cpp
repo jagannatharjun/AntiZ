@@ -6,6 +6,7 @@
 #define antiz_ver "0.1.5-git"
 
 namespace ATZutil{
+    void copyto(std::ofstream& outfile, const std::string ifname, const uint64_t length, const uint64_t inoffset, const uint64_t chunksize);
     inline int getFilesize(const std::string fname, uint64_t& fsize){
         std::ifstream f;
         f.open(fname, std::ios::in | std::ios::binary);//open the file and check for error
@@ -99,10 +100,11 @@ namespace ATZutil{
         #endif // debug
     };
     void copyto(std::ofstream& outfile, const std::string ifname, const uint64_t length, const uint64_t inoffset, const uint64_t chunksize){
-        inbuffer buffobj(ifname, chunksize, inoffset);
         if (chunksize>=length){
+            inbuffer buffobj(ifname, length, inoffset);
             outfile.write(reinterpret_cast<char*>(buffobj.buff), length);
         }else{
+            inbuffer buffobj(ifname, chunksize, inoffset);
             uint64_t done=0;
             while(done<=(length-chunksize)){
                 outfile.write(reinterpret_cast<char*>(buffobj.buff), chunksize);
