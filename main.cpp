@@ -270,6 +270,72 @@ private: //private section of ATZprocess
         }
         return nrecomp;
     }
+    int inflate_f2f(const std::string infile, const std::string outfile, const uint64_t inoffset, const uint64_t chunksize){
+        std::ifstream in;
+        std::ofstream out;
+        z_stream strm;
+        unsigned char* inbuff;
+        unsigned char* outbuff;
+        int ret, ret2;
+            //initialize stuff
+        inbuff=new unsigned char[chunksize];
+        outbuff=new unsigned char[chunksize];
+        in.open(infile, std::ios::in | std::ios::binary);//open the input file
+        out.open(outfile, std::ios::out | std::ios::binary | std::ios::trunc);//open the output file
+        if ((!in.is_open())||(!out.is_open())){//check for error
+            in.close();
+            out.close();
+            delete [] inbuff;
+            delete [] outbuff;
+            return -1;
+        }
+        in.seekg(inoffset);//seek to the beginning of the stream
+        in.read(reinterpret_cast<char*>(inbuff), chunksize);
+        strm.zalloc=Z_NULL;
+        strm.zfree=Z_NULL;
+        strm.opaque=Z_NULL;
+        strm.next_in=inbuff;
+        strm.avail_in=chunksize;
+        strm.next_out=outbuff;
+        strm.avail_out=chunksize;
+        if (inflateInit(&strm)!=Z_OK){//initialize the zlib stream
+            std::cout<<"inflateInit() failed"<<std::endl;
+            abort();
+        }
+            //do the decompression
+        while(true){
+            ret=inflate(&strm, Z_FINISH);
+            if( ret==Z_STREAM_END){//reached the end of the stream correctly
+                ret2=0;
+                out.write(reinterpret_cast<char*>(outbuff), (chunksize-strm.avail_out));//write the last output
+                break;
+            }
+            if (ret!=Z_BUF_ERROR){//if there is an error other than running out of a buffer
+                std::cout<<"error, zlib returned with unexpected value: "<<ret<<std::endl;
+                abort();
+            }
+            if (strm.avail_out==0){//if we get buf_error and ran out of output, write it to file
+                out.write(reinterpret_cast<char*>(outbuff), chunksize);
+                strm.next_out=outbuff;//reuse the buffer
+                strm.avail_out=chunksize;
+            }
+            if (strm.avail_in==0){//if we get buf_error and ran out of input, read in the next chunk
+                in.read(reinterpret_cast<char*>(inbuff), chunksize);
+                strm.next_in=inbuff;
+                strm.avail_in=chunksize;
+            }
+        }
+            //clean up and free memory
+        in.close();
+        out.close();
+        if (inflateEnd(&strm)!=Z_OK){
+            std::cout<<"inflateEnd() failed"<<std::endl;//should never happen normally
+            abort();
+        }
+        delete [] inbuff;
+        delete [] outbuff;
+        return ret2;
+    }
     void searchInfile(const uint64_t buffsize){
         //open a file and search it for possible Zlib headers
         //all information about them is pushed into a vector
