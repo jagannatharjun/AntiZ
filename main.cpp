@@ -3,7 +3,7 @@
 #include <cstring>//for memset()
 #include <zlib.h>
 #include <tclap/CmdLine.h>
-#define antiz_ver "0.1.5a"
+#define antiz_ver "0.1.6-git"
 
 namespace ATZutil{
     void copyto(std::ofstream& outfile, const std::string ifname, const uint64_t length, const uint64_t inoffset, const uint64_t chunksize);
@@ -190,11 +190,8 @@ namespace ATZdata{
 class ATZcreator{
 public:
     ATZcreator()=delete;
-    ATZcreator(std::string ifname, std::string atzname, std::string recname, ATZdata::programOptions opt){
-        infileName=ifname;
-        atzfileName=atzname;
-        reconfileName=recname;
-        options=opt;
+    ATZcreator(const std::string ifname, const std::string atzname, const std::string recname, const ATZdata::programOptions opt)
+    : infileName(ifname), atzfileName(atzname), reconfileName(recname), options(opt) {
         infileSize=0;
         processingState=0;
     }
@@ -1245,11 +1242,10 @@ int main(int argc, char* argv[]){
 	std::string reconfile_name;
 	ATZdata::programOptions options;
 
-    //parse CLI arguments
-    parseCLI(argc, argv, infile_name, atzfile_name, reconfile_name, options);//parse CLI arguments and if needed jump to reconstruction
-    ATZutil::pauser_debug();
+    parseCLI(argc, argv, infile_name, atzfile_name, reconfile_name, options); //parse CLI arguments
+    ATZutil::pauser_debug(); //pause if debugging is defined
 
-    if (!options.recon){
+    if (!options.recon){ //if we are not reconstructing from an ATZ file, then we are creating a new one
         ATZcreator createATZ(infile_name, atzfile_name, reconfile_name, options);
         if (createATZ.Phase1()!=0) return -1;
         ATZutil::pauser_debug();
