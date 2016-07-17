@@ -8,10 +8,12 @@
 namespace ATZutil{
     void copyto(std::ofstream& outfile, const std::string ifname, const uint64_t length, const uint64_t inoffset, const uint64_t chunksize);
     inline int getFilesize(const std::string fname, uint64_t& fsize){
+        ///return with the size of a file in bytes, return -1 for error
         std::ifstream f;
         f.open(fname, std::ios::in | std::ios::binary);//open the file and check for error
         if (!f.is_open()){
            std::cout<< "error: open file for size check failed!" <<std::endl;
+           std::cout<< "Cannot open file: " << fname << std::endl;
            return -1;
         }
         f.seekg (0, f.end);//getting the size of the file
@@ -28,6 +30,7 @@ namespace ATZutil{
         #endif // debug
     }
     class inbuffer{
+    ///class for simplifying chunked reading from files
     public:
         inbuffer()=delete;//the default constructor should not be used in this version
         inbuffer(std::string fname, uint64_t bs, uint64_t sp){
@@ -68,7 +71,7 @@ namespace ATZutil{
                 nreads++;
             #endif // debug
         }
-        void seekread(uint64_t pos){
+        void seekread(const uint64_t pos){
             f.clear();
             f.seekg(pos);
             buffstart=pos;
@@ -77,7 +80,7 @@ namespace ATZutil{
                 nreads++;
             #endif // debug
         }
-        void seekread_rel(int64_t relpos){
+        void seekread_rel(const int64_t relpos){
             f.clear();
             f.seekg(relpos, f.cur);
             buffstart=(int64_t)buffstart+relpos;
@@ -100,6 +103,7 @@ namespace ATZutil{
         #endif // debug
     };
     void copyto(std::ofstream& outfile, const std::string ifname, const uint64_t length, const uint64_t inoffset, const uint64_t chunksize){
+    ///opens a file at a specified position and copies some bytes from it, into an already opened output file stream
         if (chunksize>=length){
             inbuffer buffobj(ifname, length, inoffset);
             outfile.write(reinterpret_cast<char*>(buffobj.buff), length);
@@ -117,6 +121,7 @@ namespace ATZutil{
         }
     }
     inline void read2buff(const std::string fname, unsigned char buff[], const uint64_t bufflen, const uint64_t offset){
+    ///opens a file at a specified position and reads some bytes into a buffer
         std::ifstream infile;
         infile.open(fname, std::ios::in | std::ios::binary);
         infile.seekg(offset);
