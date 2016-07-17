@@ -3,7 +3,7 @@
 #include <cstring>//for memset()
 #include <zlib.h>
 #include <tclap/CmdLine.h>
-#define antiz_ver "0.1.5-git"
+#define antiz_ver "0.1.5a"
 
 namespace ATZutil{
     void copyto(std::ofstream& outfile, const std::string ifname, const uint64_t length, const uint64_t inoffset, const uint64_t chunksize);
