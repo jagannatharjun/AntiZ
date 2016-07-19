@@ -148,6 +148,11 @@ namespace ATZdata{
         bool recon;
         bool notest;
     };
+    struct zlibParamPack{
+        zlibParamPack(){}
+        zlibParamPack(uint8_t c, uint8_t w, uint8_t m) : clevel(c), window(w), memlevel(m) {}
+        uint8_t clevel, window, memlevel;
+    };
     class streamOffset{
     public:
         streamOffset()=delete;//the default constructor should not be used in this version
@@ -156,21 +161,19 @@ namespace ATZdata{
             offsetType=ot;
             streamLength=sl;
             inflatedLength=il;
-            clevel=9;
-            window=15;
-            memlvl=9;
+            zlibparams.clevel=9;
+            zlibparams.window=15;
+            zlibparams.memlevel=9;
             identBytes=0;
             firstDiffByte=-1;
             recomp=false;
             atzInfos=0;
         }
+        zlibParamPack zlibparams;
         uint64_t offset;
         int offsetType;
         uint64_t streamLength;
         uint64_t inflatedLength;
-        uint8_t clevel;
-        uint8_t window;
-        uint8_t memlvl;
         uint64_t identBytes;
         int_fast64_t firstDiffByte;//the offset of the first byte that does not match, relative to stream start, not file start
         std::vector<uint64_t> diffByteOffsets;//offsets of bytes that differ, this is an incremental offset list to enhance recompression, kinda like a PNG filter
@@ -561,6 +564,77 @@ private: //private section of ATZprocess
         }
         return ret2;
     }
+    void tryParamsFastest(unsigned char rBuffer[], unsigned char decompBuffer[], ATZdata::streamOffset& streamobj){
+        uint8_t window= 10 + (streamobj.offsetType / 4);
+        const ATZdata::zlibParamPack zlibparams1(0, window, 8);
+        const ATZdata::zlibParamPack zlibparams2(1, window, 8);
+        const ATZdata::zlibParamPack zlibparams3(1, window, 9);
+
+        #ifdef debug
+        std::cout<<"   trying most probable parameters: fastest compression"<<std::endl;
+        #endif // debug
+        if (testDeflateParams(rBuffer, decompBuffer, streamobj, zlibparams1)) return;
+        if (testDeflateParams(rBuffer, decompBuffer, streamobj, zlibparams2)) return;
+
+        #ifdef debug //if the most probable parameters are not succesful, try all different clevel and memlevel combinations
+        std::cout<<"   trying less probable parameters: fastest compression"<<std::endl;
+        #endif // debug
+        if (testDeflateParams(rBuffer, decompBuffer, streamobj, zlibparams3)) return; //try all memlvls for the most probable clvl
+        if (testParamRange(rBuffer, decompBuffer, streamobj, 1, 1, window, window, 1, 7)) return;
+
+        //try all clvl/memlvl combinations that have not been tried yet
+        testParamRange(rBuffer, decompBuffer, streamobj, 2, 9, window, window, 1, 9);
+        return;
+    }
+    void tryParamsFast(unsigned char rBuffer[], unsigned char decompBuffer[], ATZdata::streamOffset& streamobj){
+        uint8_t window= 10 + (streamobj.offsetType / 4);
+        #ifdef debug
+        std::cout<<"   trying most probable parameters: fast compression"<<std::endl;
+        #endif // debug
+        if (testParamRange(rBuffer, decompBuffer, streamobj, 2, 5, window, window, 8, 8)) return;
+
+        #ifdef debug //if the most probable parameters are not succesful, try all different clevel and memlevel combinations
+        std::cout<<"   trying less probable parameters: fast compression"<<std::endl<<std::endl;
+        #endif // debug
+        if (testParamRange(rBuffer, decompBuffer, streamobj, 2, 5, window, window, 1, 7)) return;
+        if (testParamRange(rBuffer, decompBuffer, streamobj, 2, 5, window, window, 9, 9)) return;
+        if (testParamRange(rBuffer, decompBuffer, streamobj, 1, 1, window, window, 1, 9)) return;
+        testParamRange(rBuffer, decompBuffer, streamobj, 6, 9, window, window, 1, 9);
+        return;
+    }
+    void tryParamsDefault(unsigned char rBuffer[], unsigned char decompBuffer[], ATZdata::streamOffset& streamobj){
+        uint8_t window= 10 + (streamobj.offsetType / 4);
+        const ATZdata::zlibParamPack zlibparams1(6, window, 8);
+        const ATZdata::zlibParamPack zlibparams2(6, window, 9);
+        #ifdef debug
+        std::cout<<"   trying most probable parameters: default compression"<<std::endl;
+        #endif // debug
+        if (testDeflateParams(rBuffer, decompBuffer, streamobj, zlibparams1)) return;
+        //if the most probable parameters are not succesful, try all different clevel and memlevel combinations
+        #ifdef debug
+        std::cout<<"   trying less probable parameters: default compression"<<std::endl<<std::endl;
+        #endif // debug
+        if (testDeflateParams(rBuffer, decompBuffer, streamobj, zlibparams2)) return;
+        if (testParamRange(rBuffer, decompBuffer, streamobj, 6, 6, window, window, 1, 7)) return;
+        if (testParamRange(rBuffer, decompBuffer, streamobj, 1, 5, window, window, 1, 9)) return;
+        testParamRange(rBuffer, decompBuffer, streamobj, 7, 9, window, window, 1, 9);
+        return;
+    }
+    void tryParamsBest(unsigned char rBuffer[], unsigned char decompBuffer[], ATZdata::streamOffset& streamobj){
+        uint8_t window= 10 + (streamobj.offsetType / 4);
+        #ifdef debug
+        std::cout<<"   trying most probable parameters: best compression"<<std::endl;
+        #endif // debug
+        if (testParamRange(rBuffer, decompBuffer, streamobj, 7, 9, window, window, 8, 8)) return;
+        //if the most probable parameters are not succesful, try all different clevel and memlevel combinations
+        #ifdef debug
+        std::cout<<"   trying less probable parameters: best compression"<<std::endl<<std::endl;
+        #endif // debug
+        if (testParamRange(rBuffer, decompBuffer, streamobj, 7, 9, window, window, 1, 7)) return;
+        if (testParamRange(rBuffer, decompBuffer, streamobj, 7, 9, window, window, 9, 9)) return;
+        testParamRange(rBuffer, decompBuffer, streamobj, 1, 6, window, window, 1, 9);
+        return;
+    }
     void findDeflateParams_stream(unsigned char rBuffer[], unsigned char decompBuffer[], ATZdata::streamOffset& streamobj){
         uint8_t window= 10 + (streamobj.offsetType / 4);
         uint8_t crange = streamobj.offsetType % 4;
@@ -571,63 +645,19 @@ private: //private section of ATZprocess
         //try the most probable parameters first(supplied by header or default)
         switch (crange){//we need to switch based on the clevel
             case 0:{//if the header signals fastest compression try clevel 1 and 0, header-supplied window and default memlvl(8)
-                #ifdef debug
-                std::cout<<"   trying most probable parameters: fastest compression"<<std::endl;
-                #endif // debug
-                if (testDeflateParams(rBuffer, decompBuffer, streamobj, 0, window, 8)) break;
-                if (testDeflateParams(rBuffer, decompBuffer, streamobj, 1, window, 8)) break;
-                //if the most probable parameters are not succesful, try all different clevel and memlevel combinations
-                #ifdef debug
-                std::cout<<"   trying less probable parameters: fastest compression"<<std::endl;
-                #endif // debug
-                if (testDeflateParams(rBuffer, decompBuffer, streamobj, 1, window, 9)) break;//try all memlvls for the most probable clvl
-                if (testParamRange(rBuffer, decompBuffer, streamobj, 1, 1, window, window, 1, 7)) break;
-                //try all clvl/memlvl combinations that have not been tried yet
-                testParamRange(rBuffer, decompBuffer, streamobj, 2, 9, window, window, 1, 9);
+                tryParamsFastest(rBuffer, decompBuffer, streamobj);
                 break;
              }
             case 1:{//if the header signals fast compression try clevel 2-5, header-supplied window and default memlvl(8)
-                #ifdef debug
-                std::cout<<"   trying most probable parameters: fast compression"<<std::endl;
-                #endif // debug
-                if (testParamRange(rBuffer, decompBuffer, streamobj, 2, 5, window, window, 8, 8)) break;
-                //if the most probable parameters are not succesful, try all different clevel and memlevel combinations
-                #ifdef debug
-                std::cout<<"   trying less probable parameters: fast compression"<<std::endl<<std::endl;
-                #endif // debug
-                if (testParamRange(rBuffer, decompBuffer, streamobj, 2, 5, window, window, 1, 7)) break;
-                if (testParamRange(rBuffer, decompBuffer, streamobj, 2, 5, window, window, 9, 9)) break;
-                if (testParamRange(rBuffer, decompBuffer, streamobj, 1, 1, window, window, 1, 9)) break;
-                testParamRange(rBuffer, decompBuffer, streamobj, 6, 9, window, window, 1, 9);
+                tryParamsFast(rBuffer, decompBuffer, streamobj);
                 break;
             }
             case 2:{//if the header signals default compression only try clevel 6, header-supplied window and default memlvl(8)
-                #ifdef debug
-                std::cout<<"   trying most probable parameters: default compression"<<std::endl;
-                #endif // debug
-                if (testDeflateParams(rBuffer, decompBuffer, streamobj, 6, window, 8)) break;
-                //if the most probable parameters are not succesful, try all different clevel and memlevel combinations
-                #ifdef debug
-                std::cout<<"   trying less probable parameters: default compression"<<std::endl<<std::endl;
-                #endif // debug
-                if (testDeflateParams(rBuffer, decompBuffer, streamobj, 6, window, 9)) break;
-                if (testParamRange(rBuffer, decompBuffer, streamobj, 6, 6, window, window, 1, 7)) break;
-                if (testParamRange(rBuffer, decompBuffer, streamobj, 1, 5, window, window, 1, 9)) break;
-                testParamRange(rBuffer, decompBuffer, streamobj, 7, 9, window, window, 1, 9);
+                tryParamsDefault(rBuffer, decompBuffer, streamobj);
                 break;
             }
             case 3:{//if the header signals best compression only try clevel 7-9, header-supplied window and default memlvl(8)
-                #ifdef debug
-                std::cout<<"   trying most probable parameters: best compression"<<std::endl;
-                #endif // debug
-                if (testParamRange(rBuffer, decompBuffer, streamobj, 7, 9, window, window, 8, 8)) break;
-                //if the most probable parameters are not succesful, try all different clevel and memlevel combinations
-                #ifdef debug
-                std::cout<<"   trying less probable parameters: best compression"<<std::endl<<std::endl;
-                #endif // debug
-                if (testParamRange(rBuffer, decompBuffer, streamobj, 7, 9, window, window, 1, 7)) break;
-                if (testParamRange(rBuffer, decompBuffer, streamobj, 7, 9, window, window, 9, 9)) break;
-                testParamRange(rBuffer, decompBuffer, streamobj, 1, 6, window, window, 1, 9);
+                tryParamsBest(rBuffer, decompBuffer, streamobj);
                 break;
             }
             default:{//this should never happen
@@ -647,8 +677,135 @@ private: //private section of ATZprocess
             }
         }
     }
-    bool testDeflateParams(unsigned char origstream[], unsigned char decompbuff[], ATZdata::streamOffset& streamobj,
-                        const uint8_t clevel, const uint8_t window, const uint8_t memlevel){
+    bool testDeflateParams(unsigned char origstream[], unsigned char decompbuff[], ATZdata::streamOffset& streamobj, const ATZdata::zlibParamPack& zlibparams){
+        //tests if the supplied deflate params(clevel, memlevel, window) are better for recompressing the given streamoffset
+        //if yes, then update the streamoffset object to the new best values, and if mismatch is within tolerance then return true
+        int ret;
+        uint64_t i;
+        bool fullmatch=false;
+        uint64_t identBytes;
+        #ifdef debug
+        std::cout<<"-------------------------"<<std::endl;
+        std::cout<<"   memlevel:"<<+memlevel<<std::endl;
+        std::cout<<"   clevel:"<<+clevel<<std::endl;
+        std::cout<<"   window:"<<+window<<std::endl;
+        #endif // debug
+        z_stream strm;//prepare the z_stream
+        strm.zalloc = Z_NULL;
+        strm.zfree = Z_NULL;
+        strm.opaque = Z_NULL;
+        strm.next_in= decompbuff;
+        ret = deflateInit2(&strm, zlibparams.clevel, Z_DEFLATED, zlibparams.window, zlibparams.memlevel, Z_DEFAULT_STRATEGY);
+        if (ret != Z_OK){//initialize it and check for error
+            std::cout<<"deflateInit() failed with exit code:"<<ret<<std::endl;//should never happen normally
+            abort();
+        }
+        //create a buffer to hold the recompressed data
+        unsigned char* recompBuffer= new unsigned char[deflateBound(&strm, streamobj.inflatedLength)];
+        strm.avail_in= streamobj.inflatedLength;
+        strm.next_out= recompBuffer;
+        bool doFullStream=true;
+        bool shortcut=false;
+        if ((options.shortcutEnabled)&&(streamobj.streamLength>options.shortcutLength)){//if the stream is big and shortcuts are enabled
+            shortcut=true;
+            identBytes=0;
+            strm.avail_out=options.shortcutLength;//only get a portion of the compressed data
+            ret=deflate(&strm, Z_FINISH);
+            if ((ret!=Z_STREAM_END)&&(ret!=Z_OK)){//most of the times the compressed data wont fit and we get Z_OK
+                std::cout<<"deflate() in shorcut failed with exit code:"<<ret<<std::endl;//should never happen normally
+                abort();
+            }
+            #ifdef debug
+            std::cout<<"   shortcut: "<<strm.total_in<<" bytes compressed to "<<strm.total_out<<" bytes"<<std::endl;
+            #endif // debug
+            for (i=0;i<strm.total_out;i++){
+                if (recompBuffer[i]==origstream[i]){
+                    identBytes++;
+                }
+            }
+            if (identBytes<(uint64_t)(options.shortcutLength-options.recompTresh)) doFullStream=false;//if we have too many mismatches bail early
+            #ifdef debug
+            std::cout<<"   shortcut: "<<identBytes<<" bytes out of "<<strm.total_out<<" identical"<<std::endl;
+            #endif // debug
+        }
+        if (doFullStream){
+            identBytes=0;
+            if (shortcut){
+                strm.avail_out=deflateBound(&strm, streamobj.inflatedLength)-options.shortcutLength;
+            }else{
+                strm.avail_out=deflateBound(&strm, streamobj.inflatedLength);
+            }
+            ret=deflate(&strm, Z_FINISH);//do the actual compression
+            //check the return value to see if everything went well
+            if (ret != Z_STREAM_END){
+                std::cout<<"deflate() failed with exit code:"<<ret<<std::endl;
+                abort();
+            }
+            #ifdef debug
+            std::cout<<"   size difference: "<<(static_cast<int64_t>(strm.total_out)-static_cast<int64_t>(streamobj.streamLength))<<std::endl;
+            #endif // debug
+            uint64_t smaller;
+            if (abs((strm.total_out-streamobj.streamLength))<=options.sizediffTresh){//if the size difference is not more than the treshold
+                if (strm.total_out<streamobj.streamLength){//this is to prevent an array overread
+                    smaller=strm.total_out;
+                } else {
+                    smaller=streamobj.streamLength;
+                }
+                for (i=0; i<smaller;i++){
+                    if (recompBuffer[i]==origstream[i]){
+                        identBytes++;
+                    }
+                }
+                #ifdef debug
+                std::cout<<"   diffBytes: "<<(streamobj.streamLength-identBytes)<<std::endl;
+                #endif // debug
+                if (identBytes>streamobj.identBytes){//if this recompressed stream has more matching bytes than the previous best
+                    streamobj.identBytes=identBytes;
+                    streamobj.zlibparams.clevel=zlibparams.clevel;
+                    streamobj.zlibparams.memlevel=zlibparams.memlevel;
+                    streamobj.zlibparams.window=zlibparams.window;
+                    streamobj.firstDiffByte=-1;
+                    streamobj.diffByteOffsets.clear();
+                    streamobj.diffByteVal.clear();
+                    if (identBytes==streamobj.streamLength){//if we have a full match set the flag to bail from the nested loops
+                        #ifdef debug
+                        std::cout<<"   recompression succesful, full match"<<std::endl;
+                        #endif // debug
+                        fullmatch=true;
+                    }else{//there are different bytes and/or bytes at the end
+                        std::vector<uint64_t> rawdiff;
+                        if (identBytes+options.mismatchTol>=streamobj.streamLength) fullmatch=true;//if at most mismatchTol bytes diff bail from the loop
+                        for (i=0; i<smaller;i++){//diff it
+                            if (recompBuffer[i]!=origstream[i]){//if a mismatching byte is found
+                                rawdiff.push_back(i);
+                                streamobj.diffByteVal.push_back(origstream[i]);
+                            }
+                        }
+                        if (strm.total_out<streamobj.streamLength){//if the recompressed stream is shorter we need to add bytes after diffing
+                            for (i=strm.total_out; i<streamobj.streamLength; i++){//adding bytes
+                                rawdiff.push_back(i);
+                                streamobj.diffByteVal.push_back(origstream[i]);
+                            }
+                        }
+                        deltaEncode(rawdiff, streamobj);
+                    }
+                }
+            }
+            #ifdef debug
+            else{
+                std::cout<<"   size difference is greater than "<<options.sizediffTresh<<" bytes, not comparing"<<std::endl;
+            }
+            #endif // debug
+        }
+        ret=deflateEnd(&strm);
+        if ((ret != Z_OK)&&!((ret==Z_DATA_ERROR) && (!doFullStream))){//Z_DATA_ERROR is only acceptable if we skipped the full recompression
+            std::cout<<"deflateEnd() failed with exit code:"<<ret<<std::endl;//should never happen normally
+            abort();
+        }
+        delete [] recompBuffer;
+        return fullmatch;
+    }
+    bool testDeflateParams(unsigned char origstream[], unsigned char decompbuff[], ATZdata::streamOffset& streamobj, const uint8_t clevel, const uint8_t window, const uint8_t memlevel){
         //tests if the supplied deflate params(clevel, memlevel, window) are better for recompressing the given streamoffset
         //if yes, then update the streamoffset object to the new best values, and if mismatch is within tolerance then return true
         int ret;
@@ -732,9 +889,9 @@ private: //private section of ATZprocess
                 #endif // debug
                 if (identBytes>streamobj.identBytes){//if this recompressed stream has more matching bytes than the previous best
                     streamobj.identBytes=identBytes;
-                    streamobj.clevel=clevel;
-                    streamobj.memlvl=memlevel;
-                    streamobj.window=window;
+                    streamobj.zlibparams.clevel=clevel;
+                    streamobj.zlibparams.memlevel=memlevel;
+                    streamobj.zlibparams.window=window;
                     streamobj.firstDiffByte=-1;
                     streamobj.diffByteOffsets.clear();
                     streamobj.diffByteVal.clear();
@@ -850,9 +1007,9 @@ private: //private section of ATZprocess
         writeNumber8(outfile, streamobj.offset);
         writeNumber8(outfile, streamobj.streamLength);
         writeNumber8(outfile, streamobj.inflatedLength);
-        writeNumber1(outfile, streamobj.clevel);
-        writeNumber1(outfile, streamobj.window);
-        writeNumber1(outfile, streamobj.memlvl);
+        writeNumber1(outfile, streamobj.zlibparams.clevel);
+        writeNumber1(outfile, streamobj.zlibparams.window);
+        writeNumber1(outfile, streamobj.zlibparams.memlevel);
         uint64_t diffbytes=streamobj.diffByteOffsets.size();
         writeNumber8(outfile, diffbytes);
         if (diffbytes>0){
@@ -882,9 +1039,9 @@ private: //private section of ATZprocess
             std::cout<<"-------------------------"<<std::endl;
             std::cout<<"   stream #"<<j<<std::endl;
             std::cout<<"   offset:"<<streamOffsetList[j].offset<<std::endl;
-            std::cout<<"   memlevel:"<<+streamOffsetList[j].memlvl<<std::endl;
-            std::cout<<"   clevel:"<<+streamOffsetList[j].clevel<<std::endl;
-            std::cout<<"   window:"<<+streamOffsetList[j].window<<std::endl;
+            std::cout<<"   memlevel:"<<+streamOffsetList[j].zlibparams.memlevel<<std::endl;
+            std::cout<<"   clevel:"<<+streamOffsetList[j].zlibparams.clevel<<std::endl;
+            std::cout<<"   window:"<<+streamOffsetList[j].zlibparams.window<<std::endl;
             std::cout<<"   best match:"<<streamOffsetList[j].identBytes<<" out of "<<streamOffsetList[j].streamLength<<std::endl;
             std::cout<<"   diffBytes:"<<streamOffsetList[j].diffByteOffsets.size()<<std::endl;
             std::cout<<"   diffVals:"<<streamOffsetList[j].diffByteVal.size()<<std::endl;
@@ -954,7 +1111,7 @@ public:
                 unsigned char* readBuff= new unsigned char[streamOffsetList[j].inflatedLength];
                 //read in the decompressed stream from ATZ file
                 ATZutil::read2buff(atzfileName, readBuff, streamOffsetList[j].inflatedLength, streamOffsetList[j].atzInfos);
-                doDeflate(readBuff, streamOffsetList[j].inflatedLength, compBuffer, streamOffsetList[j].streamLength+65535, streamOffsetList[j].clevel, streamOffsetList[j].window, streamOffsetList[j].memlvl);
+                doDeflate(readBuff, streamOffsetList[j].inflatedLength, compBuffer, streamOffsetList[j].streamLength+65535, streamOffsetList[j].zlibparams);
                 //do stream modification if needed
                 if (streamOffsetList[j].firstDiffByte>=0){
                     uint64_t i, sum=0;
@@ -1001,7 +1158,7 @@ private:
         memcpy(&output, buff, 8);
         return output;
     }
-    inline uint64_t readNumber8(std::ifstream& infile, uint64_t pos){
+    inline uint64_t readNumber8(std::ifstream& infile, const uint64_t pos){
         unsigned char buff[8];
         infile.seekg(pos);
         infile.read(reinterpret_cast<char*>(buff), 8);
@@ -1009,13 +1166,13 @@ private:
         memcpy(&output, buff, 8);
         return output;
     }
-    inline uint8_t readNumber1(std::ifstream& infile, uint64_t pos){
+    inline uint8_t readNumber1(std::ifstream& infile, const uint64_t pos){
         uint8_t output;
         infile.seekg(pos);
         infile.read(reinterpret_cast<char*>(&output), 1);
         return output;
     }
-    void doDeflate(unsigned char* next_in, uint64_t avail_in, unsigned char* next_out, uint64_t avail_out, uint8_t clvl, uint8_t window, uint8_t memlvl){
+    void doDeflate(unsigned char* next_in, uint64_t avail_in, unsigned char* next_out, uint64_t avail_out, const ATZdata::zlibParamPack& zlibparams){
         z_stream strm;
         int ret;
         strm.zalloc = Z_NULL;
@@ -1024,7 +1181,7 @@ private:
         strm.next_in=next_in;
         strm.avail_in=avail_in;
             //initialize the stream for compression and check for error
-        ret=deflateInit2(&strm, clvl, Z_DEFLATED, window, memlvl, Z_DEFAULT_STRATEGY);
+        ret=deflateInit2(&strm, zlibparams.clevel, Z_DEFLATED, zlibparams.window, zlibparams.memlevel, Z_DEFAULT_STRATEGY);
         if(ret!=Z_OK){
             std::cout<<"deflateInit() failed with exit code:"<<ret<<std::endl;
             abort();
@@ -1079,9 +1236,9 @@ private:
             std::cout<<"stream #"<<j<<std::endl;
             #endif // debug
             streamOffsetList.push_back(ATZdata::streamOffset(readNumber8(atzfile, lastos), -1, readNumber8(atzfile, lastos+8), readNumber8(atzfile, lastos+16)));
-            streamOffsetList[j].clevel=readNumber1(atzfile, lastos+24);
-            streamOffsetList[j].window=readNumber1(atzfile, lastos+25);
-            streamOffsetList[j].memlvl=readNumber1(atzfile, lastos+26);
+            streamOffsetList[j].zlibparams.clevel=readNumber1(atzfile, lastos+24);
+            streamOffsetList[j].zlibparams.window=readNumber1(atzfile, lastos+25);
+            streamOffsetList[j].zlibparams.memlevel=readNumber1(atzfile, lastos+26);
             //partial match handling
             uint64_t diffbytes=readNumber8(atzfile, lastos+27);
             if (diffbytes>0){//if the stream is just a partial match
