@@ -805,151 +805,27 @@ private: //private section of ATZprocess
         delete [] recompBuffer;
         return fullmatch;
     }
-    bool testDeflateParams(unsigned char origstream[], unsigned char decompbuff[], ATZdata::streamOffset& streamobj, const uint8_t clevel, const uint8_t window, const uint8_t memlevel){
-        //tests if the supplied deflate params(clevel, memlevel, window) are better for recompressing the given streamoffset
-        //if yes, then update the streamoffset object to the new best values, and if mismatch is within tolerance then return true
-        int ret;
-        uint64_t i;
-        bool fullmatch=false;
-        uint64_t identBytes;
-        #ifdef debug
-        std::cout<<"-------------------------"<<std::endl;
-        std::cout<<"   memlevel:"<<+memlevel<<std::endl;
-        std::cout<<"   clevel:"<<+clevel<<std::endl;
-        std::cout<<"   window:"<<+window<<std::endl;
-        #endif // debug
-        z_stream strm;//prepare the z_stream
-        strm.zalloc = Z_NULL;
-        strm.zfree = Z_NULL;
-        strm.opaque = Z_NULL;
-        strm.next_in= decompbuff;
-        ret = deflateInit2(&strm, clevel, Z_DEFLATED, window, memlevel, Z_DEFAULT_STRATEGY);
-        if (ret != Z_OK){//initialize it and check for error
-            std::cout<<"deflateInit() failed with exit code:"<<ret<<std::endl;//should never happen normally
-            abort();
-        }
-        //create a buffer to hold the recompressed data
-        unsigned char* recompBuffer= new unsigned char[deflateBound(&strm, streamobj.inflatedLength)];
-        strm.avail_in= streamobj.inflatedLength;
-        strm.next_out= recompBuffer;
-        bool doFullStream=true;
-        bool shortcut=false;
-        if ((options.shortcutEnabled)&&(streamobj.streamLength>options.shortcutLength)){//if the stream is big and shortcuts are enabled
-            shortcut=true;
-            identBytes=0;
-            strm.avail_out=options.shortcutLength;//only get a portion of the compressed data
-            ret=deflate(&strm, Z_FINISH);
-            if ((ret!=Z_STREAM_END)&&(ret!=Z_OK)){//most of the times the compressed data wont fit and we get Z_OK
-                std::cout<<"deflate() in shorcut failed with exit code:"<<ret<<std::endl;//should never happen normally
-                abort();
-            }
-            #ifdef debug
-            std::cout<<"   shortcut: "<<strm.total_in<<" bytes compressed to "<<strm.total_out<<" bytes"<<std::endl;
-            #endif // debug
-            for (i=0;i<strm.total_out;i++){
-                if (recompBuffer[i]==origstream[i]){
-                    identBytes++;
-                }
-            }
-            if (identBytes<(uint64_t)(options.shortcutLength-options.recompTresh)) doFullStream=false;//if we have too many mismatches bail early
-            #ifdef debug
-            std::cout<<"   shortcut: "<<identBytes<<" bytes out of "<<strm.total_out<<" identical"<<std::endl;
-            #endif // debug
-        }
-        if (doFullStream){
-            identBytes=0;
-            if (shortcut){
-                strm.avail_out=deflateBound(&strm, streamobj.inflatedLength)-options.shortcutLength;
-            }else{
-                strm.avail_out=deflateBound(&strm, streamobj.inflatedLength);
-            }
-            ret=deflate(&strm, Z_FINISH);//do the actual compression
-            //check the return value to see if everything went well
-            if (ret != Z_STREAM_END){
-                std::cout<<"deflate() failed with exit code:"<<ret<<std::endl;
-                abort();
-            }
-            #ifdef debug
-            std::cout<<"   size difference: "<<(static_cast<int64_t>(strm.total_out)-static_cast<int64_t>(streamobj.streamLength))<<std::endl;
-            #endif // debug
-            uint64_t smaller;
-            if (abs((strm.total_out-streamobj.streamLength))<=options.sizediffTresh){//if the size difference is not more than the treshold
-                if (strm.total_out<streamobj.streamLength){//this is to prevent an array overread
-                    smaller=strm.total_out;
-                } else {
-                    smaller=streamobj.streamLength;
-                }
-                for (i=0; i<smaller;i++){
-                    if (recompBuffer[i]==origstream[i]){
-                        identBytes++;
-                    }
-                }
-                #ifdef debug
-                std::cout<<"   diffBytes: "<<(streamobj.streamLength-identBytes)<<std::endl;
-                #endif // debug
-                if (identBytes>streamobj.identBytes){//if this recompressed stream has more matching bytes than the previous best
-                    streamobj.identBytes=identBytes;
-                    streamobj.zlibparams.clevel=clevel;
-                    streamobj.zlibparams.memlevel=memlevel;
-                    streamobj.zlibparams.window=window;
-                    streamobj.firstDiffByte=-1;
-                    streamobj.diffByteOffsets.clear();
-                    streamobj.diffByteVal.clear();
-                    if (identBytes==streamobj.streamLength){//if we have a full match set the flag to bail from the nested loops
-                        #ifdef debug
-                        std::cout<<"   recompression succesful, full match"<<std::endl;
-                        #endif // debug
-                        fullmatch=true;
-                    }else{//there are different bytes and/or bytes at the end
-                        std::vector<uint64_t> rawdiff;
-                        if (identBytes+options.mismatchTol>=streamobj.streamLength) fullmatch=true;//if at most mismatchTol bytes diff bail from the loop
-                        for (i=0; i<smaller;i++){//diff it
-                            if (recompBuffer[i]!=origstream[i]){//if a mismatching byte is found
-                                rawdiff.push_back(i);
-                                streamobj.diffByteVal.push_back(origstream[i]);
-                            }
-                        }
-                        if (strm.total_out<streamobj.streamLength){//if the recompressed stream is shorter we need to add bytes after diffing
-                            for (i=strm.total_out; i<streamobj.streamLength; i++){//adding bytes
-                                rawdiff.push_back(i);
-                                streamobj.diffByteVal.push_back(origstream[i]);
-                            }
-                        }
-                        deltaEncode(rawdiff, streamobj);
-                    }
-                }
-            }
-            #ifdef debug
-            else{
-                std::cout<<"   size difference is greater than "<<options.sizediffTresh<<" bytes, not comparing"<<std::endl;
-            }
-            #endif // debug
-        }
-        ret=deflateEnd(&strm);
-        if ((ret != Z_OK)&&!((ret==Z_DATA_ERROR) && (!doFullStream))){//Z_DATA_ERROR is only acceptable if we skipped the full recompression
-            std::cout<<"deflateEnd() failed with exit code:"<<ret<<std::endl;//should never happen normally
-            abort();
-        }
-        delete [] recompBuffer;
-        return fullmatch;
-    }
     inline bool testParamRange(unsigned char origbuff[], unsigned char decompbuff[], ATZdata::streamOffset& streamobj, const uint8_t clevel_min,
                                 const uint8_t clevel_max, const uint8_t window_min, const uint8_t window_max,
                                 const uint8_t memlevel_min, const uint8_t memlevel_max){
         //this function tests a given range of deflate parameters
         uint8_t clevel, memlevel, window;
         bool fullmatch;
+        std::vector<ATZdata::zlibParamPack> zlibParamVec;
         for(window=window_max; window>=window_min; window--){
             for(memlevel=memlevel_max; memlevel>=memlevel_min; memlevel--){
                 for(clevel=clevel_max; clevel>=clevel_min; clevel--){
-                    fullmatch=testDeflateParams(origbuff, decompbuff, streamobj, clevel, window, memlevel);
-                    if (fullmatch){
-                        #ifdef debug
-                        std::cout<<"   recompression succesful within tolerance, bailing"<<std::endl;
-                        #endif // debug
-                        return true;
-                    }
+                    zlibParamVec.push_back(ATZdata::zlibParamPack(clevel, window, memlevel));
                 }
+            }
+        }
+        for (uint32_t i=0; i<zlibParamVec.size(); i++){
+            fullmatch=testDeflateParams(origbuff, decompbuff, streamobj, zlibParamVec[i]);
+            if (fullmatch){
+                #ifdef debug
+                std::cout<<"   recompression succesful within tolerance, bailing"<<std::endl;
+                #endif // debug
+                return true;
             }
         }
         return false;
