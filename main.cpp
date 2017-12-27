@@ -313,7 +313,6 @@ class ATZcreator {
     std::string infileName;
     std::string atzfileName;
     std::string reconfileName;
-    //std::vector<ATZdata::fileOffset> fileOffsetList;//offsetList stores memory offsets where potential headers can be found, and the type of the offset
     std::vector<ATZdata::streamOffset> streamOffsetList; //streamOffsetList stores offsets of confirmed zlib streams and a bunch of data on them
     ATZdata::programOptions options;
     int processingState;
@@ -501,7 +500,7 @@ class ATZcreator {
 
 #ifdef debug //if the most probable parameters are not succesful, try all different clevel and memlevel combinations
         std::cout << "   trying less probable parameters: fastest compression" << std::endl;
-#endif                                                                                // debug
+#endif  // debug
         if (testDeflateParams(rBuffer, decompBuffer, streamobj, zlibparams3)) return; //try all memlvls for the most probable clvl
         if (testParamRange(rBuffer, decompBuffer, streamobj, 1, 1, window, window, 1, 7)) return;
 
