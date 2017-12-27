@@ -147,6 +147,92 @@ namespace ATZutil{
         infile.read(reinterpret_cast<char*>(buff), bufflen);
         infile.close();
     }
+    class ZBuffSearcher {
+        bool needMoreData = false;
+        uintmax_t lastChunkOffset = 0, chunkOffset = 0, ZOBuffSz = 0;
+        ZlibInflator ZInflator;
+        int offsetType;
+        uint8_t *ZOBuf;
+        std::vector<ATZdata::streamOffset> * strmOfsets;
+public:
+        ZBuffSearcher(const uintmax_t _buffSz,std::vector<ATZdata::streamOffset> * p) :
+            ZOBuffSz{_buffSz},
+            ZOBuf{new uint8_t[ZOBuffSz]},
+            strmOfsets{p}
+        {};
+        ~ZBuffSearcher() { delete[] ZOBuf; }
+
+        ZBuffSearcher(const ZBuffSearcher&) = delete;
+        ZBuffSearcher(const ZBuffSearcher&&) = delete;
+        ZBuffSearcher& operator =(const ZBuffSearcher&) = delete;
+        ZBuffSearcher& operator =(const ZBuffSearcher&&) = delete;
+
+        static int parseOffsetType(const int header){
+        // A zlib stream has the following structure: (http://tools.ietf.org/html/rfc1950)
+        //  +---+---+   CMF: bits 0 to 3  CM      Compression method (8 = deflate)
+        //  |CMF|FLG|        bits 4 to 7  CINFO   Compression info (base-2 logarithm of the LZ77 window size minus 8)
+        //  +---+---+
+        //              FLG: bits 0 to 4  FCHECK  Check bits for CMF and FLG (in MSB order (CMF*256 + FLG) is a multiple of 31)
+        //                   bit  5       FDICT   Preset dictionary
+        //                   bits 6 to 7  FLEVEL  Compression level (0 = fastest, 1 = fast, 2 = default, 3 = maximum)
+        switch (header){
+            case 0x2815 : return 0;  case 0x2853 : return 1;  case 0x2891 : return 2;  case 0x28cf : return 3;
+            case 0x3811 : return 4;  case 0x384f : return 5;  case 0x388d : return 6;  case 0x38cb : return 7;
+            case 0x480d : return 8;  case 0x484b : return 9;  case 0x4889 : return 10; case 0x48c7 : return 11;
+            case 0x5809 : return 12; case 0x5847 : return 13; case 0x5885 : return 14; case 0x58c3 : return 15;
+            case 0x6805 : return 16; case 0x6843 : return 17; case 0x6881 : return 18; case 0x68de : return 19;
+            case 0x7801 : return 20; case 0x785e : return 21; case 0x789c : return 22; case 0x78da : return 23;
+            default: return -1;
+        }
+    }
+
+        void operator() (uint8_t* buffer, const uintmax_t buffLen) {
+            uintmax_t i = 0, redlen = buffLen - 1;
+            if (needMoreData) {
+                ZInflator.refillInput(buffer,buffLen);
+                while (ZInflator.avail_out() == 0) {
+                    ZInflator.continuePrev(ZOBuf, ZOBuffSz);
+                }
+                if (ZInflator.lastRetVal() == Z_STREAM_END) {
+                    strmOfsets->push_back(ATZdata::streamOffset(lastChunkOffset, offsetType,ZInflator.totalInputByte(),ZInflator.totalOutputByte()));
+                    i = buffLen - ZInflator.avail_in();
+                }
+                needMoreData = (ZInflator.avail_in() == 0); // ran out of input again, no need to update LastChunkOffset
+            }
+            for(;i<redlen && !needMoreData;i++) {
+                //search for 7801, 785E, 789C, 78DA, 68DE, 6881, 6843, 6805, 58C3, 5885, 5847, 5809,
+                //           48C7, 4889, 484B, 480D, 38CB, 388D, 384F, 3811, 28CF, 2891, 2853, 2815
+                int header = ((int)buffer[i]) * 256 + (int)buffer[i + 1];
+                offsetType = parseOffsetType(header);
+                if (offsetType >= 0) {
+                    #ifdef debug
+                        std::cout << "Zlib header 0x" << std::hex << std::setfill('0') << std::setw(4) << header << std::dec
+                            << " with " << (1 << ((header >> 12) - 2)) << "K window at offset: " << (i+chunkOffset) << std::endl;
+                    #endif // debug
+                    ZInflator(ZOBuf, ZOBuffSz, buffer + i, buffLen - i);
+                    if (ZInflator.totalInputByte() <= 16)
+                        continue;
+                    while (ZInflator.avail_out() == 0) {
+                        ZInflator.continuePrev(ZOBuf, ZOBuffSz);
+                    }
+                    if (ZInflator.lastRetVal() == Z_STREAM_END) {
+                        strmOfsets->push_back(ATZdata::streamOffset(i+chunkOffset, offsetType,ZInflator.totalInputByte(),ZInflator.totalOutputByte()));
+                        i += ZInflator.totalInputByte();
+                        i--;// loop will increment it
+                    }
+                    else if (needMoreData = (ZInflator.avail_in() == 0)) // ran out of input
+                        lastChunkOffset = i + chunkOffset;
+                }
+
+            }
+        #ifdef debug
+            std::cout<<std::endl;
+		#endif // debug
+            chunkOffset += redlen;
+        }
+
+
+    };
 }
 
 class ATZcreator{
@@ -298,6 +384,7 @@ private: //private section of ATZprocess
         std::ifstream f;
         unsigned char* rBuffer;
         uint8_t LastByte;
+        ATZutil::ZBuffSearcher buffsearch(options.chunksize,&streamOffsetList);
         infileSize = 0;
 
         f.open(infileName, std::ios::in | std::ios::binary);//open the input file
@@ -306,7 +393,7 @@ private: //private section of ATZprocess
 
         f.read(reinterpret_cast<char*>(rBuffer), buffsize);
         LastByte = rBuffer[f.gcount()-1];
-        searchBuffer(rBuffer, f.gcount());//do the 0-th chunk
+        buffsearch(rBuffer, f.gcount());//do the 0-th chunk
         infileSize += f.gcount();
 
         // subsequent searching will read buffsize-1 bytes as to process LastByte left by searchBuffer
@@ -314,82 +401,11 @@ private: //private section of ATZprocess
             rBuffer[0] = LastByte;
             f.read(reinterpret_cast<char*>(rBuffer+1), buffsize-1);
             LastByte = rBuffer[f.gcount()-1]; // save lastByte for subsequent operations
-            searchBuffer(rBuffer, f.gcount()+1/*LastByte*/, infileSize-1); // infilesize is 1-Based
+            buffsearch(rBuffer, f.gcount()+1/*LastByte*/);
             infileSize += f.gcount();
         }
         f.close();
         delete [] rBuffer;
-    }
-    void searchBuffer(unsigned char buffer[], const uint64_t buffLen, const uint64_t chunkOffset=0){
-        //this function searches a buffer for zlib headers, count them and fill a vector of fileOffsets
-        //chunkOffset is used if the input buffer is just a chunk of a bigger set of data (eg. a file that does not fit into RAM)
-        //a new variable is used so the substraction is only performed once, not every time it loops
-        //it is pointless to test the last byte and it could cause and out of bounds read
-        static bool needMore = false;
-        static uintmax_t lastChunkOffset = 0;
-        static ZlibInflator ZInflator;
-        static int offsetType;
-        uint64_t redlen=buffLen-1;
-        const auto OBUFLEN = 4*1024*1024;
-        static std::unique_ptr<uint8_t> ZOBuf{new uint8_t[OBUFLEN]};
-        uint64_t i=0;
-        if (needMore) {
-            ZInflator.refillInput(buffer,buffLen);
-            while (ZInflator.avail_out() == 0) {
-                ZInflator.continuePrev(ZOBuf.get(), OBUFLEN);
-            }
-            if (ZInflator.lastRetVal() == Z_STREAM_END) {
-                streamOffsetList.push_back(ATZdata::streamOffset(lastChunkOffset, offsetType,ZInflator.totalInputByte(),ZInflator.totalOutputByte()));
-                i = buffLen - ZInflator.avail_in();
-            }
-            needMore = (ZInflator.avail_in() == 0); // ran out of input again, no need to update LastChunkOffset
-        }
-        for(;i<redlen && !needMore;i++) {
-            //search for 7801, 785E, 789C, 78DA, 68DE, 6881, 6843, 6805, 58C3, 5885, 5847, 5809,
-            //           48C7, 4889, 484B, 480D, 38CB, 388D, 384F, 3811, 28CF, 2891, 2853, 2815
-            int header = ((int)buffer[i]) * 256 + (int)buffer[i + 1];
-            offsetType = parseOffsetType(header);
-            if (offsetType >= 0) {
-                #ifdef debug
-                    std::cout << "Zlib header 0x" << std::hex << std::setfill('0') << std::setw(4) << header << std::dec
-                        << " with " << (1 << ((header >> 12) - 2)) << "K window at offset: " << (i+chunkOffset) << std::endl;
-                #endif // debug
-                ZInflator(ZOBuf.get(), OBUFLEN, buffer + i, buffLen - i);
-                if (ZInflator.totalInputByte() <= 16)
-                    continue;
-                while (ZInflator.avail_out() == 0) {
-                    ZInflator.continuePrev(ZOBuf.get(), OBUFLEN);
-                }
-                if (ZInflator.lastRetVal() == Z_STREAM_END) {
-                    streamOffsetList.push_back(ATZdata::streamOffset(i+chunkOffset, offsetType,ZInflator.totalInputByte(),ZInflator.totalOutputByte()));
-                    i += ZInflator.totalInputByte();
-                    i--;// loop will increment it
-                }
-                else if (needMore = (ZInflator.avail_in() == 0)) // ran out of input
-                    lastChunkOffset = i + chunkOffset;
-            }
-        }
-        #ifdef debug
-            std::cout<<std::endl;
-        #endif // debug
-    }
-    int parseOffsetType(const int header){
-        // A zlib stream has the following structure: (http://tools.ietf.org/html/rfc1950)
-        //  +---+---+   CMF: bits 0 to 3  CM      Compression method (8 = deflate)
-        //  |CMF|FLG|        bits 4 to 7  CINFO   Compression info (base-2 logarithm of the LZ77 window size minus 8)
-        //  +---+---+
-        //              FLG: bits 0 to 4  FCHECK  Check bits for CMF and FLG (in MSB order (CMF*256 + FLG) is a multiple of 31)
-        //                   bit  5       FDICT   Preset dictionary
-        //                   bits 6 to 7  FLEVEL  Compression level (0 = fastest, 1 = fast, 2 = default, 3 = maximum)
-        switch (header){
-            case 0x2815 : return 0;  case 0x2853 : return 1;  case 0x2891 : return 2;  case 0x28cf : return 3;
-            case 0x3811 : return 4;  case 0x384f : return 5;  case 0x388d : return 6;  case 0x38cb : return 7;
-            case 0x480d : return 8;  case 0x484b : return 9;  case 0x4889 : return 10; case 0x48c7 : return 11;
-            case 0x5809 : return 12; case 0x5847 : return 13; case 0x5885 : return 14; case 0x58c3 : return 15;
-            case 0x6805 : return 16; case 0x6843 : return 17; case 0x6881 : return 18; case 0x68de : return 19;
-            case 0x7801 : return 20; case 0x785e : return 21; case 0x789c : return 22; case 0x78da : return 23;
-            default: return -1;
-        }
     }
     void findDeflateParams_ALL(){
         //this function takes a filename and a vector containing information about the valid zlib streams in the file
