@@ -231,6 +231,7 @@ public:
             chunkOffset += redlen;
         }
 
+    auto getChunkOffset() { return chunkOffset; }
 
     };
 }
@@ -385,7 +386,6 @@ private: //private section of ATZprocess
         unsigned char* rBuffer;
         uint8_t LastByte;
         ATZutil::ZBuffSearcher buffsearch(options.chunksize,&streamOffsetList);
-        infileSize = 0;
 
         f.open(infileName, std::ios::in | std::ios::binary);//open the input file
         ATZassert(f.is_open(),(std::string("failed to open File ") + infileName).c_str());
@@ -394,7 +394,6 @@ private: //private section of ATZprocess
         f.read(reinterpret_cast<char*>(rBuffer), buffsize);
         LastByte = rBuffer[f.gcount()-1];
         buffsearch(rBuffer, f.gcount());//do the 0-th chunk
-        infileSize += f.gcount();
 
         // subsequent searching will read buffsize-1 bytes as to process LastByte left by searchBuffer
         while (!f.eof()){//read in and process the file until the end of file
@@ -402,9 +401,10 @@ private: //private section of ATZprocess
             f.read(reinterpret_cast<char*>(rBuffer+1), buffsize-1);
             LastByte = rBuffer[f.gcount()-1]; // save lastByte for subsequent operations
             buffsearch(rBuffer, f.gcount()+1/*LastByte*/);
-            infileSize += f.gcount();
         }
+        infileSize = buffsearch.getChunkOffset();
         f.close();
+
         delete [] rBuffer;
     }
     void findDeflateParams_ALL(){
