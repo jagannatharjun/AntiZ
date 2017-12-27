@@ -2,11 +2,29 @@
 #include <vector>
 #include <cstring>//for memset()
 #include <zlib.h>
+#include <functional>
+#include <memory>
 #include <cassert>
 #include <tclap/CmdLine.h>
+#include "ZlibWrapper.h"
+#include "AtzData.h"
 #define antiz_ver "0.1.6-git"
 
 namespace ATZutil{
+
+#ifdef debug
+#define ATZassert(EXPRESSION,MESSAGE) \
+    assert(EXPRESSION && MESSAGE);  // we don't need Much
+#else
+#define ATZassert(EXPRESSION,MESSAGE) \
+    { \
+        if ((EXPRESSION) == false) {\
+            std::cerr << "Error Encountered: " << MESSAGE << std::endl; \
+            std::exit(1); \
+        } \
+    }
+#endif // debug
+
     void copyto(std::ofstream& outfile, const std::string ifname, const uint64_t length, const uint64_t inoffset, const uint64_t chunksize);
     inline int getFilesize(const std::string fname, uint64_t& fsize){
         ///return with the size of a file in bytes, return -1 for error
@@ -131,73 +149,9 @@ namespace ATZutil{
     }
 }
 
-namespace ATZdata{
-    struct programOptions{
-        //parameters that some users may want to tweak
-        uint_fast16_t recompTresh;//streams are only recompressed if the best match differs from the original in <= recompTresh bytes
-        uint_fast16_t sizediffTresh;//streams are only compared when the size difference is <= sizediffTresh
-        uint_fast16_t shortcutLength;//stop compression and count mismatches after this many bytes, if we get more than recompTresh then bail early
-        uint_fast16_t mismatchTol;//if there are at most this many mismatches consider the stream a full match and stop looking for better parameters
-        bool bruteforceWindow=false;//bruteforce the zlib parameters, otherwise only try probable parameters based on the 2-byte header
-        uint64_t chunksize;//the size of buffers used for file IO, controls memory usage
-
-        //debug parameters, not useful for most users
-        bool shortcutEnabled=true;//enable speedup shortcut in phase 3
-        int_fast64_t concentrate=-1;//only try to recompress the stream# givel here, negative values disable this and run on all streams, debug tool
-
-        //command line switches
-        bool recon;
-        bool notest;
-    };
-    struct zlibParamPack{
-        zlibParamPack(){}
-        zlibParamPack(uint8_t c, uint8_t w, uint8_t m) : clevel(c), window(w), memlevel(m) {}
-        uint8_t clevel, window, memlevel;
-    };
-    class streamOffset{
-    public:
-        streamOffset()=delete;//the default constructor should not be used in this version
-        streamOffset(uint64_t os, int ot, uint64_t sl, uint64_t il){
-            offset=os;
-            offsetType=ot;
-            streamLength=sl;
-            inflatedLength=il;
-            zlibparams.clevel=9;
-            zlibparams.window=15;
-            zlibparams.memlevel=9;
-            identBytes=0;
-            firstDiffByte=-1;
-            recomp=false;
-            atzInfos=0;
-        }
-        zlibParamPack zlibparams;
-        uint64_t offset;
-        int offsetType;
-        uint64_t streamLength;
-        uint64_t inflatedLength;
-        uint64_t identBytes;
-        int_fast64_t firstDiffByte;//the offset of the first byte that does not match, relative to stream start, not file start
-        std::vector<uint64_t> diffByteOffsets;//offsets of bytes that differ, this is an incremental offset list to enhance recompression, kinda like a PNG filter
-        //this improves compression if the mismatching bytes are consecutive, eg. 451,452,453,...(no repetitions, hard to compress)
-        //  transforms into 0, 1, 1, 1,...(repetitive, easy to compress)
-        std::vector<uint8_t> diffByteVal;
-        bool recomp;
-        uint64_t atzInfos;
-    };
-    class fileOffset{
-    public:
-        fileOffset()=delete;//the default constructor should not be used in this version
-        fileOffset(uint64_t os, int ot){
-            offset=os;
-            offsetType=ot;
-        }
-        uint64_t offset;
-        int offsetType;
-    };
-}
-
 class ATZcreator{
 public:
+
     ATZcreator()=delete;
     ATZcreator(const std::string ifname, const std::string atzname, const std::string recname, const ATZdata::programOptions opt)
     : infileName(ifname), atzfileName(atzname), reconfileName(recname), options(opt) {
@@ -209,27 +163,25 @@ public:
         //search the file for zlib headers, count them and create an offset list
         if (processingState!=0) return -10;
 
-        // just a guess
-        fileOffsetList.reserve(0x10000 << 1);
-        #ifdef debug
-            std::cout<<"Offset list initial capacity:"<<fileOffsetList.capacity()<<std::endl;
-        #endif
-
         //search the file for zlib headers and also sets infilesize as the total Bytes read from the infile
         searchInfile(options.chunksize);
 
-        std::cout<<"Total zlib headers found: "<<fileOffsetList.size()<<std::endl;
+
+        std::cout<<"Total zlib headers found: "<<streamOffsetList.size()<<std::endl;
         processingState=1;
         return 0;
     }
     int Phase2(){
         //PHASE 2
         //start trying to decompress at the collected offsets, test all offsets found in phase 1
+
+        //27-Dec-2017 : merged Phase1() and Phase2()
+
         if (processingState!=1) return -10;
-        testOffsetList_chunked(options.chunksize);
-        std::cout<<"Valid zlib streams: "<<streamOffsetList.size()<<std::endl;
-        fileOffsetList.clear();//we only need the good offsets
-        fileOffsetList.shrink_to_fit();
+        //testOffsetList_chunked(options.chunksize);
+        //std::cout<<"Valid zlib streams: "<<streamOffsetList.size()<<std::endl;
+        //fileOffsetList.clear();//we only need the good offsets
+        //fileOffsetList.shrink_to_fit();
         processingState=2;
         return 0;
     }
@@ -260,7 +212,7 @@ private: //private section of ATZprocess
     std::string infileName;
 	std::string atzfileName;
 	std::string reconfileName;
-    std::vector<ATZdata::fileOffset> fileOffsetList;//offsetList stores memory offsets where potential headers can be found, and the type of the offset
+    //std::vector<ATZdata::fileOffset> fileOffsetList;//offsetList stores memory offsets where potential headers can be found, and the type of the offset
     std::vector<ATZdata::streamOffset> streamOffsetList;//streamOffsetList stores offsets of confirmed zlib streams and a bunch of data on them
 	ATZdata::programOptions options;
 	int processingState;
@@ -349,12 +301,14 @@ private: //private section of ATZprocess
         infileSize = 0;
 
         f.open(infileName, std::ios::in | std::ios::binary);//open the input file
+        ATZassert(f.is_open(),(std::string("failed to open File ") + infileName).c_str());
         rBuffer = new unsigned char[buffsize];
 
         f.read(reinterpret_cast<char*>(rBuffer), buffsize);
         LastByte = rBuffer[f.gcount()-1];
         searchBuffer(rBuffer, f.gcount());//do the 0-th chunk
         infileSize += f.gcount();
+
         // subsequent searching will read buffsize-1 bytes as to process LastByte left by searchBuffer
         while (!f.eof()){//read in and process the file until the end of file
             rBuffer[0] = LastByte;
@@ -371,18 +325,48 @@ private: //private section of ATZprocess
         //chunkOffset is used if the input buffer is just a chunk of a bigger set of data (eg. a file that does not fit into RAM)
         //a new variable is used so the substraction is only performed once, not every time it loops
         //it is pointless to test the last byte and it could cause and out of bounds read
+        static bool needMore = false;
+        static uintmax_t lastChunkOffset = 0;
+        static ZlibInflator ZInflator;
+        static int offsetType;
         uint64_t redlen=buffLen-1;
-        for(uint64_t i=0;i<redlen;i++){
+        const auto OBUFLEN = 4*1024*1024;
+        static std::unique_ptr<uint8_t> ZOBuf{new uint8_t[OBUFLEN]};
+        uint64_t i=0;
+        if (needMore) {
+            ZInflator.refillInput(buffer,buffLen);
+            while (ZInflator.avail_out() == 0) {
+                ZInflator.continuePrev(ZOBuf.get(), OBUFLEN);
+            }
+            if (ZInflator.lastRetVal() == Z_STREAM_END) {
+                streamOffsetList.push_back(ATZdata::streamOffset(lastChunkOffset, offsetType,ZInflator.totalInputByte(),ZInflator.totalOutputByte()));
+                i = buffLen - ZInflator.avail_in();
+            }
+            needMore = (ZInflator.avail_in() == 0); // ran out of input again, no need to update LastChunkOffset
+        }
+        for(;i<redlen && !needMore;i++) {
             //search for 7801, 785E, 789C, 78DA, 68DE, 6881, 6843, 6805, 58C3, 5885, 5847, 5809,
             //           48C7, 4889, 484B, 480D, 38CB, 388D, 384F, 3811, 28CF, 2891, 2853, 2815
             int header = ((int)buffer[i]) * 256 + (int)buffer[i + 1];
-            int offsetType = parseOffsetType(header);
+            offsetType = parseOffsetType(header);
             if (offsetType >= 0) {
                 #ifdef debug
                     std::cout << "Zlib header 0x" << std::hex << std::setfill('0') << std::setw(4) << header << std::dec
                         << " with " << (1 << ((header >> 12) - 2)) << "K window at offset: " << (i+chunkOffset) << std::endl;
                 #endif // debug
-                fileOffsetList.push_back(ATZdata::fileOffset(i+chunkOffset, offsetType));
+                ZInflator(ZOBuf.get(), OBUFLEN, buffer + i, buffLen - i);
+                if (ZInflator.totalInputByte() <= 16)
+                    continue;
+                while (ZInflator.avail_out() == 0) {
+                    ZInflator.continuePrev(ZOBuf.get(), OBUFLEN);
+                }
+                if (ZInflator.lastRetVal() == Z_STREAM_END) {
+                    streamOffsetList.push_back(ATZdata::streamOffset(i+chunkOffset, offsetType,ZInflator.totalInputByte(),ZInflator.totalOutputByte()));
+                    i += ZInflator.totalInputByte();
+                    i--;// loop will increment it
+                }
+                else if (needMore = (ZInflator.avail_in() == 0)) // ran out of input
+                    lastChunkOffset = i + chunkOffset;
             }
         }
         #ifdef debug
@@ -406,101 +390,6 @@ private: //private section of ATZprocess
             case 0x7801 : return 20; case 0x785e : return 21; case 0x789c : return 22; case 0x78da : return 23;
             default: return -1;
         }
-    }
-    void testOffsetList_chunked(const uint64_t buffsize){
-        //this function takes a vector of fileOffsets and the name of the file, and tests if the offsets in the fileOffset vector
-        //are marking the beginnings of valid zlib streams
-        //the offsets, types, lengths and inflated lengths of valid zlib streams are pushed to a vector of streamOffsets
-        uint64_t numOffsets=fileOffsetList.size();
-        uint64_t lastGoodOffset=0;
-        uint64_t lastStreamLength=0;
-        uint64_t i;
-        int ret;
-        z_stream strm;
-        strm.zalloc=Z_NULL;
-        strm.zfree=Z_NULL;
-        strm.opaque=Z_NULL;
-        ATZutil::inbuffer infile(infileName, buffsize, 0);//for reading in data from the file
-        for (i=0; i<numOffsets; i++){
-            if ((lastGoodOffset+lastStreamLength)<=fileOffsetList[i].offset){//if the current offset is known to be part of the last stream it is pointless to check it
-                //read in the first chunk
-                //since we have no idea about the length of the zlib stream, take the worst case, i.e. everything after the header belongs to the stream
-                if ((fileOffsetList[i].offset>=infile.buffstart)&&(fileOffsetList[i].offset<(infile.buffstart+buffsize-15))){//if the first 16 bytes of the current stream is already in the buffer
-                    strm.next_in=infile.buff+(fileOffsetList[i].offset-infile.buffstart);
-                    strm.avail_in=buffsize-(fileOffsetList[i].offset-infile.buffstart);
-                } else {
-                    infile.seekread(fileOffsetList[i].offset);//seek to the beginning of the current stream
-                    strm.next_in=infile.buff;
-                    strm.avail_in=buffsize;
-                }
-                if (inflateInit(&strm)!=Z_OK){
-                    std::cout<<"inflateInit() failed"<<std::endl;
-                    abort();
-                }
-                while(true){
-                    ret=CheckOffset_chunked(strm, buffsize);
-                    if (ret==0){
-                        lastGoodOffset=fileOffsetList[i].offset;
-                        lastStreamLength=strm.total_in;
-                        streamOffsetList.push_back(ATZdata::streamOffset(fileOffsetList[i].offset, fileOffsetList[i].offsetType, strm.total_in, strm.total_out));
-                        #ifdef debug
-                        std::cout<<"Offset #"<<i<<" ("<<fileOffsetList[i].offset<<") decompressed, "<<strm.total_in<<" bytes to "<<strm.total_out<<" bytes"<<std::endl;
-                        #endif // debug
-                        break;
-                    }
-                    if (ret==1) break;//if the stream is invalid
-                    if (ret==2){//need more input
-                        if (infile.eof()) break;//if there is a truncated Zlib stream at the end of the file
-                        infile.next_chunk();
-                        strm.next_in=infile.buff;
-                        strm.avail_in=buffsize;
-                    }
-                    if (ret<0) abort();//should never happen normally
-                }
-                if (inflateEnd(&strm)!=Z_OK){
-                    std::cout<<"inflateEnd() failed"<<std::endl;//should never happen normally
-                    abort();
-                }
-            }
-            #ifdef debug
-            else{
-                std::cout<<"skipping offset #"<<i<<" ("<<fileOffsetList[i].offset<<") because it cannot be a header"<<std::endl;
-            }
-            #endif // debug
-        }
-        std::cout<<std::endl;
-    }
-    inline int CheckOffset_chunked(z_stream& strm, const uint64_t buffsize){
-        //this is kinda like a wrapper function for inflate(), to be used for testing zlib streams
-        //since we dont need the inflated data, it can be thrown away to limit memory usage
-        //strm MUST be already initialized with inflateInit before calling this function
-        //strm should be deallocated with inflateEnd when done, to prevent memory leak
-        //returns 0 if the stream is valid, 1 if invalid, 2 if the next chunk is needed, negative values for error
-        unsigned char* decompBuffer= new unsigned char[buffsize];//a buffer needs to be created to hold the resulting decompressed data
-        int ret2=-9;
-        while (true){
-            strm.next_out=decompBuffer;
-            strm.avail_out=buffsize;
-            int ret=inflate(&strm, Z_FINISH);//try to do the actual decompression in one pass
-            if( ret==Z_STREAM_END){//if we have decompressed the entire stream correctly, it must be valid
-                if (strm.total_in>=16) ret2=0; else ret2=1;//dont care about streams shorter than 16 bytes
-                break;//leave the function with 0 or 1
-            }
-            if (ret==Z_DATA_ERROR){//the stream is invalid
-                ret2=1;
-                break;//leave the function with 1
-            }
-            if (ret!=Z_BUF_ERROR){//if there is an error other than running out of output buffer
-                std::cout<<"error, zlib returned with unexpected value: "<<ret<<std::endl;
-                abort();
-            }
-            if (strm.avail_in==0){//if we get buf_error and ran out of input, get next chunk
-                ret2=2;
-                break;
-            }
-        }
-        delete [] decompBuffer;
-        return ret2;
     }
     void findDeflateParams_ALL(){
         //this function takes a filename and a vector containing information about the valid zlib streams in the file
@@ -689,9 +578,9 @@ private: //private section of ATZprocess
         uint64_t identBytes;
         #ifdef debug
         std::cout<<"-------------------------"<<std::endl;
-        std::cout<<"   memlevel:"<<+memlevel<<std::endl;
-        std::cout<<"   clevel:"<<+clevel<<std::endl;
-        std::cout<<"   window:"<<+window<<std::endl;
+        std::cout<<"   memlevel:"<<+zlibparams.memlevel<<std::endl;
+        std::cout<<"   clevel:"<<+zlibparams.clevel<<std::endl;
+        std::cout<<"   window:"<<+zlibparams.window<<std::endl;
         #endif // debug
         z_stream strm;//prepare the z_stream
         strm.zalloc = Z_NULL;
