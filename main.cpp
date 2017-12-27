@@ -2,6 +2,7 @@
 #include <vector>
 #include <cstring>//for memset()
 #include <zlib.h>
+#include <cassert>
 #include <tclap/CmdLine.h>
 #define antiz_ver "0.1.6-git"
 
@@ -207,19 +208,16 @@ public:
         //PHASE 1
         //search the file for zlib headers, count them and create an offset list
         if (processingState!=0) return -10;
-        if (ATZutil::getFilesize(infileName, infileSize)!=0) return -1;//if opening the file fails, exit
-        std::cout<<"Input file size:"<<infileSize<<std::endl;
-        //try to guess the number of potential zlib headers in the file from the file size
-        //this value is purely empirical, may need tweaking
-        fileOffsetList.reserve(static_cast<uint64_t>(infileSize/1912));
+
+        // just a guess
+        fileOffsetList.reserve(0x10000 << 1);
         #ifdef debug
             std::cout<<"Offset list initial capacity:"<<fileOffsetList.capacity()<<std::endl;
         #endif
-        if (infileSize>options.chunksize){
-            searchInfile(options.chunksize);//search the file for zlib headers
-        }else{
-            searchInfile(infileSize+1);//the +1 makes sure we get eof and skip the while loop
-        }
+
+        //search the file for zlib headers and also sets infilesize as the total Bytes read from the infile
+        searchInfile(options.chunksize);
+
         std::cout<<"Total zlib headers found: "<<fileOffsetList.size()<<std::endl;
         processingState=1;
         return 0;
@@ -344,21 +342,26 @@ private: //private section of ATZprocess
     void searchInfile(const uint64_t buffsize){
         //open a file and search it for possible Zlib headers
         //all information about them is pushed into a vector
+        assert(buffsize > 0); // if not, buffsize-1 will crash the program
         std::ifstream f;
-        uint64_t i;
         unsigned char* rBuffer;
+        uint8_t LastByte;
+        infileSize = 0;
+
         f.open(infileName, std::ios::in | std::ios::binary);//open the input file
         rBuffer = new unsigned char[buffsize];
-        memset(rBuffer, 0, buffsize);
+
         f.read(reinterpret_cast<char*>(rBuffer), buffsize);
-        searchBuffer(rBuffer, buffsize);//do the 0-th chunk
-        i=1;
+        LastByte = rBuffer[f.gcount()-1];
+        searchBuffer(rBuffer, f.gcount());//do the 0-th chunk
+        infileSize += f.gcount();
+        // subsequent searching will read buffsize-1 bytes as to process LastByte left by searchBuffer
         while (!f.eof()){//read in and process the file until the end of file
-            memset(rBuffer, 0, buffsize);//the buffer needs to be zeroed out, or the last chunk will cause a crash
-            f.seekg(-1, f.cur);//seek back one byte because the last byte in the previous chunk never gets parsed
-            f.read(reinterpret_cast<char*>(rBuffer), buffsize);
-            searchBuffer(rBuffer, buffsize, (i*buffsize-i));
-            i++;
+            rBuffer[0] = LastByte;
+            f.read(reinterpret_cast<char*>(rBuffer+1), buffsize-1);
+            LastByte = rBuffer[f.gcount()-1]; // save lastByte for subsequent operations
+            searchBuffer(rBuffer, f.gcount()+1/*LastByte*/, infileSize-1); // infilesize is 1-Based
+            infileSize += f.gcount();
         }
         f.close();
         delete [] rBuffer;
@@ -374,7 +377,7 @@ private: //private section of ATZprocess
             //           48C7, 4889, 484B, 480D, 38CB, 388D, 384F, 3811, 28CF, 2891, 2853, 2815
             int header = ((int)buffer[i]) * 256 + (int)buffer[i + 1];
             int offsetType = parseOffsetType(header);
-            if (offsetType >= 0){
+            if (offsetType >= 0) {
                 #ifdef debug
                     std::cout << "Zlib header 0x" << std::hex << std::setfill('0') << std::setw(4) << header << std::dec
                         << " with " << (1 << ((header >> 12) - 2)) << "K window at offset: " << (i+chunkOffset) << std::endl;
@@ -745,7 +748,7 @@ private: //private section of ATZprocess
             std::cout<<"   size difference: "<<(static_cast<int64_t>(strm.total_out)-static_cast<int64_t>(streamobj.streamLength))<<std::endl;
             #endif // debug
             uint64_t smaller;
-            if (abs((strm.total_out-streamobj.streamLength))<=options.sizediffTresh){//if the size difference is not more than the treshold
+            if (abs((intmax_t)(strm.total_out-streamobj.streamLength))<=options.sizediffTresh){//if the size difference is not more than the treshold
                 if (strm.total_out<streamobj.streamLength){//this is to prevent an array overread
                     smaller=strm.total_out;
                 } else {
