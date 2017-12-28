@@ -1,4 +1,5 @@
 #include <string>
+#include <stdexcept>
 #include <zlib.h>
 
 class BasicZlib {

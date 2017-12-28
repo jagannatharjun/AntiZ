@@ -1,5 +1,8 @@
 #ifndef _ATZDATA_HEADER
 #define _ATZDATA_HEADER
+#include <stdint.h>
+#include <vector>
+
 namespace ATZdata {
 struct programOptions {
     // parameters that some users may want to tweak
