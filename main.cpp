@@ -1,13 +1,11 @@
 #include "AtzData.h"
 #include "ZlibWrapper.h"
 #include <cassert>
-#include <cstring> //for memset()
 #include <fstream>
-#include <functional>
-#include <memory>
+#include <cstdio> // sprintf
+#include <cstdlib> // system
 #include <tclap/CmdLine.h>
 #include <vector>
-#include <zlib.h>
 #define antiz_ver "0.1.6-git"
 
 namespace ATZutil {
@@ -625,7 +623,7 @@ class ATZcreator {
             std::cout << "deflateInit() failed with exit code:" << ret << std::endl; //should never happen normally
             abort();
         }
-        //create a buffer to hold the recompressed data
+        // create a buffer to hold the recompressed data
         unsigned char *recompBuffer = new unsigned char[deflateBound(&strm, streamobj.inflatedLength)];
         strm.avail_in = streamobj.inflatedLength;
         strm.next_out = recompBuffer;
@@ -719,6 +717,7 @@ class ATZcreator {
 #ifdef debug
             else {
                 std::cout << "   size difference is greater than " << options.sizediffTresh << " bytes, not comparing" << std::endl;
+            }
             }
 #endif // debug
         }
@@ -909,7 +908,7 @@ class ATZreconstructor {
 #endif // debug
                 //a buffer needs to be created to hold the decompressed and the compressed data
                 unsigned char *compBuffer = new unsigned char[streamOffsetList[j].streamLength + 65535];
-                unsigned char *readBuff = new unsigned char[streamOffsetList[j].inflatedLength];
+                unsigned char *readBuff   = new unsigned char[streamOffsetList[j].inflatedLength];
                 //read in the decompressed stream from ATZ file
                 ATZutil::read2buff(atzfileName, readBuff, streamOffsetList[j].inflatedLength, streamOffsetList[j].atzInfos);
                 doDeflate(readBuff, streamOffsetList[j].inflatedLength, compBuffer, streamOffsetList[j].streamLength + 65535, streamOffsetList[j].zlibparams);
@@ -1175,8 +1174,9 @@ int testATZfile(std::string infileName, std::string atzfileName, std::string rec
     uint64_t infileSize = 0;
     uint64_t recfileSize = 0;
     ATZreconstructor reconATZ(atzfileName, reconfileName);
-    if (reconATZ.reconstructATZ(chunksize) != 0) return -1;
+    ATZassert(reconATZ.reconstructATZ(chunksize) == 0,"testATZFile() : Reconstruction Failed");
     std::cout << "Testing...";
+
     ATZutil::getFilesize(infileName, infileSize);
     ATZutil::getFilesize(reconfileName, recfileSize);
 #ifdef debug
@@ -1193,7 +1193,8 @@ int testATZfile(std::string infileName, std::string atzfileName, std::string rec
         std::cout << "error: byte mismatch";
         return -2;
     }
-    std::cout << "OK!" << std::endl;
+    std::cout << "OK! Restoration is bit by bit identical" << std::endl;
+
     if (remove(reconfileName.c_str()) != 0) { //delete the reconstructed file since it was only needed for testing
         std::cout << "error: cannot delete recfile";
         return -3;
